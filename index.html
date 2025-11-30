@@ -11,6 +11,10 @@
     --cell-size: 24px;
     --grid-size: 30;
   }
+  #grid {
+  touch-action: none;
+  transform-origin: 0 0;
+}
   body {
     margin: 0;
     height: 100vh;
@@ -39,6 +43,16 @@
   .switch input:checked + .slider{background:#2ea44f}
   .switch input:checked + .slider:before{transform:translateX(20px)}
   #modeLabel{font-size:13px;margin-left:6px}
+  .frost-center {
+  position:absolute;
+  width:8px;
+  height:8px;
+  border-radius:50%;
+  background:#ff2b2b;
+  transform:translate(-50%,-50%);
+  pointer-events:none;
+  z-index:5;
+}
 
   #defenseScroller {
     background:#0e1115;
@@ -74,6 +88,10 @@
     background:linear-gradient(#dfe6ee,#e7ecf3);
     padding:10px;border-radius:8px;
   }
+  #gridWrapper{
+  overflow: hidden;
+  touch-action: none;
+}
 
   #grid {
     width: calc(var(--cell-size) * var(--grid-size) + 30px);
@@ -87,16 +105,7 @@
     position: relative;
     user-select: none;
   }
-  .frost-center {
-  position:absolute;
-  width:8px;
-  height:8px;
-  border-radius:50%;
-  background:#ff2b2b;
-  transform:translate(-50%,-50%);
-  pointer-events:none;
-  z-index:5;
-}
+
   .cell {
     width: var(--cell-size);
     height: var(--cell-size);
@@ -166,7 +175,11 @@
   <!-- MAIN -->
   <div id="main">
     <div id="gridArea">
-      <div id="grid" title="Drop defenses here"></div>
+        <div id="gridWrapper">
+          <div id="grid"></div>
+        </div>
+      </div>
+      
     </div>
 
     <!-- RIGHT PANEL -->
@@ -199,28 +212,28 @@
 <script>
 /* ========== CONSTANTS (as provided) ========== */
 const DEFENSE_IMAGES = {
-  "Cannon": "https://static.wikia.nocookie.net/clashofclans/images/9/9a/Cannon5C.png/revision/latest?cb=20231217071942",
-  "Spear Thrower": "https://static.wikia.nocookie.net/clashofclans/images/6/60/Spear_Thrower5.png/revision/latest?cb=20221211225432",
-  "Multi Cannon": "https://static.wikia.nocookie.net/clashofclans/images/2/22/Multi_Cannon5.png/revision/latest?cb=20221203044815",
-  "Bomb Tower": "https://static.wikia.nocookie.net/clashofclans/images/4/4c/Bomb_Tower5C.png/revision/latest?cb=20221225050425",
-  "Super Giant Post": "https://static.wikia.nocookie.net/clashofclans/images/0/04/Super_Giant_Post5.png/revision/latest?cb=20231217050855",
-  "Crusher": "https://static.wikia.nocookie.net/clashofclans/images/e/e2/Crusher5C.png/revision/latest?cb=20221211231154",
-  "Raid Cart Post": "https://static.wikia.nocookie.net/clashofclans/images/f/ff/Raid_Cart_Post5.png/revision/latest?cb=20231217050827",
-  "Air Bombs": "https://static.wikia.nocookie.net/clashofclans/images/a/ae/Air_Bombs5C.png/revision/latest?cb=20231217073805",
-  "Super Wizard Tower": "https://static.wikia.nocookie.net/clashofclans/images/e/e6/Super_Wizard_Tower5.png/revision/latest?cb=20221225050508",
-  "Air Defense": "https://static.wikia.nocookie.net/clashofclans/images/d/d8/Air_Defense5C.png/revision/latest?cb=20221225050449",
-  "Multi Mortar": "https://static.wikia.nocookie.net/clashofclans/images/7/7d/Multi_Mortar5C.png/revision/latest?cb=20221128085751",
-  "Rocket Artillery": "https://static.wikia.nocookie.net/clashofclans/images/c/c4/Rocket_Artillery5.png/revision/latest?cb=20221211225754",
-  "Mega Hidden Tesla": "https://static.wikia.nocookie.net/clashofclans/images/c/cc/Hidden_Mega_Tesla5.png/revision/latest?cb=20231217065740",
-  "Super Dragon Post": "https://static.wikia.nocookie.net/clashofclans/images/a/a2/Super_Dragon_Post4.png/revision/latest?cb=20231217051011",
-  "Goblin Thrower": "https://static.wikia.nocookie.net/clashofclans/images/1/1a/Goblin_Thrower4.png/revision/latest?cb=20231217044602",
-  "Reflector": "https://static.wikia.nocookie.net/clashofclans/images/2/26/Reflector4.png/revision/latest?cb=20221212223911",
-  "Rapid Rockets": "https://static.wikia.nocookie.net/clashofclans/images/7/71/Rapid_Rockets5.png/revision/latest?cb=20231217075223",
-  "Inferno Tower": "https://static.wikia.nocookie.net/clashofclans/images/9/97/Inferno_Tower5C.png/revision/latest?cb=20220507090714",
-  "Giant Cannon": "https://static.wikia.nocookie.net/clashofclans/images/0/07/Giant_Cannon5C.png/revision/latest?cb=20220507083841",
-  "Mini Minion Hive": "https://static.wikia.nocookie.net/clashofclans/images/a/a4/Mini-Minion_Hive4.png/revision/latest?cb=20221213031534",
-  "Blast Bow": "https://static.wikia.nocookie.net/clashofclans/images/7/79/Blast_Bow5.png/revision/latest?cb=20220508102219",
-  "Clan Capital Hall": "https://static.wikia.nocookie.net/clashofclans/images/2/2c/Capital_Hall10.png/revision/latest?cb=20221125041238"
+  "Cannon": "/defenses/Cannon5C.webp",
+  "Spear Thrower": "/defenses/Spear_Thrower5.webp",
+  "Multi Cannon": "/defenses/Multi_Cannon5.webp",
+  "Bomb Tower": "/defenses/Bomb_Tower5C.webp",
+  "Super Giant Post": "/defenses/super_giant_post.webp",
+  "Crusher": "/defenses/Crusher5C.webp",
+  "Raid Cart Post": "/defenses/Raid_Cart_Post5.webp",
+  "Air Bombs": "/defenses/Air_Bombs5C.webp",
+  "Super Wizard Tower": "/defenses/super_wizard_tower.webp",
+  "Air Defense": "/defenses/Air_Defense5C.webp",
+  "Multi Mortar": "/defenses/Multi_Mortar5C.webp",
+  "Rocket Artillery": "/defenses/Rocket_Artillery5.webp",
+  "Mega Hidden Tesla": "/defenses/Hidden_Mega_Tesla5.webp",
+  "Super Dragon Post": "/defenses/Super_Dragon_Post5.webp",
+  "Goblin Thrower": "/defenses/Goblin_Thrower4.webp",
+  "Reflector": "/defenses/Reflector4.webp",
+  "Rapid Rockets": "/defenses/Rapid_Rockets5.webp",
+  "Inferno Tower": "/defenses/Inferno_Tower5C.webp",
+  "Giant Cannon": "/defenses/Giant_Cannon5C.webp",
+  "Mini Minion Hive": "/defenses/Mini-Minion_Hive4.webp",
+  "Blast Bow": "/defenses/Blast_Bow5.webp",
+  "Clan Capital Hall": "/defenses/Capital_Hall10.webp"
 };
 
 const DEF_SIZES = {
@@ -248,6 +261,32 @@ const DEF_SIZES = {
     "Mini Minion Hive": 3
 };
 
+// ---------- Image preloader ----------
+const IMAGE_CACHE = {}; // name -> { img: Image, loaded: boolean, error: boolean }
+
+function preloadDefenseImages() {
+  Object.keys(DEFENSE_IMAGES).forEach(name => {
+    const url = DEFENSE_IMAGES[name];
+    const img = new Image();
+    // Try to request anonymous CORS so canvas can read pixels when possible
+    img.crossOrigin = 'anonymous';
+    img.src = url;
+
+    IMAGE_CACHE[name] = { img, loaded: false, error: false };
+
+    img.onload = () => {
+      IMAGE_CACHE[name].loaded = true;
+    };
+    img.onerror = () => {
+      IMAGE_CACHE[name].error = true;
+      console.warn(`Failed to load image for ${name} — CORS or network may block it:`, url);
+    };
+  });
+}
+// call once
+preloadDefenseImages();
+
+
 /* ========== CONFIG ========== */
 const GRID_SIZE = 30;
 const FROST_RADIUS = 5; // tiles
@@ -265,7 +304,12 @@ const exportJSON = document.getElementById('exportJSON');
 const loadSample = document.getElementById('loadSample');
 const undoBtn = document.getElementById('undoBtn');
 const redoBtn = document.getElementById('redoBtn');
-
+let armedDefense = null;      // for mobile tap-to-place
+let isDraggingPan = false;
+let lastTouch = null;
+let scale = 1;
+let panX = 0;
+let panY = 0;
 /* ========== STATE ========== */
 // placements: array of { id, name, r, c, size }
 // selectedTargets: array of placement ids selected for frost
@@ -334,8 +378,16 @@ function populateSidebar() {
     img.alt = name;
     img.dataset.def = name;
     img.addEventListener('dragstart', (e)=>{
-      e.dataTransfer.setData('text/defense', name);
-    });
+  e.dataTransfer.setData('text/defense', name);
+});
+
+/* MOBILE TAP SELECT */
+img.addEventListener('click', ()=>{
+  armedDefense = name;
+  [...defenseScroller.children].forEach(i=>i.style.outline='');
+  img.style.outline = '2px solid #4b6ef6';
+});
+
     defenseScroller.appendChild(img);
   });
 }
@@ -514,21 +566,35 @@ gridEl.addEventListener('click', (e) => {
   let target = e.target;
   while (target && !target.dataset?.r) target = target.parentElement;
   if (!target) return;
-  const r = parseInt(target.dataset.r,10), c = parseInt(target.dataset.c,10);
-  // find placement under this cell
-  const placement = placements.find(p => r >= p.r && r < p.r + p.size && c >= p.c && c < p.c + p.size);
-  if (!placement) return;
-  // toggle selection
-  const idx = selectedTargets.indexOf(placement.id);
-  if (idx === -1) {
-    selectedTargets.push(placement.id);
-  } else {
-    selectedTargets.splice(idx,1);
+
+  const r = parseInt(target.dataset.r,10);
+  const c = parseInt(target.dataset.c,10);
+
+  /* 👉 MOBILE TAP-TO-PLACE */
+  if (armedDefense) {
+    placeDefense(armedDefense, r, c);
+    saveHistory();
+    armedDefense = null;
+    [...defenseScroller.children].forEach(i=>i.style.outline='');
+    return;
   }
-  computedDrops = []; // clear previous computed drops when user toggles selection
-  saveHistory(); // keep selection change in undo history
+
+  /* 👉 EXISTING FROST SELECTION */
+  const placement = placements.find(p =>
+    r >= p.r && r < p.r + p.size &&
+    c >= p.c && c < p.c + p.size
+  );
+  if (!placement) return;
+
+  const idx = selectedTargets.indexOf(placement.id);
+  if (idx === -1) selectedTargets.push(placement.id);
+  else selectedTargets.splice(idx,1);
+
+  computedDrops = [];
+  saveHistory();
   renderAll();
 });
+
 
 // right click to remove
 gridEl.addEventListener('contextmenu', (e) => {
@@ -654,35 +720,143 @@ autoPlaceBtn.addEventListener('click', ()=>{
 });
 
 /* ========== EXPORT to PNG ========== */
+// ---------- Robust export (replaces previous exportBtn handler) ----------
 exportBtn.addEventListener('click', async () => {
-  const grid = document.getElementById('grid');
+  // Size calculations: compute pixel size from CSS variables
+  const cellSize = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cell-size')) || 24;
+  const gridPixelsW = GRID_SIZE * cellSize;
+  const gridPixelsH = GRID_SIZE * cellSize;
 
-  // Save original inline styles
-  const prevWidth = grid.style.width;
-  const prevHeight = grid.style.height;
+  // allow the user to choose scale for higher-res exports
+  const exportScale = 2;
 
-  // Force explicit pixel size so html2canvas can't guess wrong
-  const rect = grid.getBoundingClientRect();
-  grid.style.width = rect.width + 'px';
-  grid.style.height = rect.height + 'px';
+  // create offscreen canvas
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(gridPixelsW * exportScale);
+  canvas.height = Math.round(gridPixelsH * exportScale);
+  const ctx = canvas.getContext('2d');
 
-  const canvas = await html2canvas(grid, {
-    backgroundColor: null,
-    scale: 2,
-    useCORS: true,
-    allowTaint: true
-  });
+  // optional: white background
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Restore styles
-  grid.style.width = prevWidth;
-  grid.style.height = prevHeight;
+  // draw grid background similar to your UI (tiles background)
+  // You can customize tile color; using same as .cell background
+  for (let r = 0; r < GRID_SIZE; r++) {
+    for (let c = 0; c < GRID_SIZE; c++) {
+      const x = Math.round(c * cellSize * exportScale);
+      const y = Math.round(r * cellSize * exportScale);
+      ctx.fillStyle = '#6b7280'; // default cell color
+      ctx.fillRect(x, y, Math.round(cellSize * exportScale), Math.round(cellSize * exportScale));
+      // small gap (grid line) as in your CSS (gap:1px)
+      // draw gap as darker line on right and bottom
+      ctx.fillStyle = '#222';
+      ctx.fillRect(x + Math.round(cellSize * exportScale) - Math.round(1 * exportScale), y, Math.round(1 * exportScale), Math.round(cellSize * exportScale));
+      ctx.fillRect(x, y + Math.round(cellSize * exportScale) - Math.round(1 * exportScale), Math.round(cellSize * exportScale), Math.round(1 * exportScale));
+    }
+  }
 
+  // draw placements: images stretched across their footprint
+  // track if any image had a CORS error or didn't load
+  let anyImageError = false;
+
+  for (let p of placements) {
+    const px = Math.round(p.c * cellSize * exportScale);
+    const py = Math.round(p.r * cellSize * exportScale);
+    const pw = Math.round(p.size * cellSize * exportScale);
+    const ph = Math.round(p.size * cellSize * exportScale);
+
+    // draw a subtle cell background for placed defenses (matches UI)
+    ctx.fillStyle = '#6b7280';
+    ctx.fillRect(px, py, pw, ph);
+
+    const cache = IMAGE_CACHE[p.name];
+    if (cache && cache.loaded && !cache.error) {
+      try {
+        // draw the cached image stretched
+        ctx.drawImage(cache.img, px, py, pw, ph);
+      } catch (err) {
+        console.warn('drawImage failed for', p.name, err);
+        anyImageError = true;
+      }
+    } else {
+      // image not available — mark as missing and draw the name as fallback
+      anyImageError = anyImageError || (cache && cache.error);
+      ctx.fillStyle = '#222';
+      ctx.fillRect(px, py, pw, ph);
+      ctx.fillStyle = '#fff';
+      ctx.font = `${Math.max(10, Math.floor(cellSize * exportScale * 0.35))}px sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(p.name, px + pw / 2, py + ph / 2, pw - 6);
+    }
+  }
+
+  // draw frost overlays (use same style as .frosted)
+  for (let drop of computedDrops) {
+    for (let dx = -FROST_RADIUS; dx <= FROST_RADIUS; dx++) {
+      for (let dy = -FROST_RADIUS; dy <= FROST_RADIUS; dy++) {
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        if (dist <= FROST_RADIUS) {
+          const rr = drop.r + dx;
+          const cc = drop.c + dy;
+          if (rr < 0 || rr >= GRID_SIZE || cc < 0 || cc >= GRID_SIZE) continue;
+          const x = Math.round(cc * cellSize * exportScale);
+          const y = Math.round(rr * cellSize * exportScale);
+          // draw a translucent blue overlay
+          ctx.fillStyle = 'rgba(0,180,255,0.08)';
+          ctx.fillRect(x, y, Math.round(cellSize * exportScale), Math.round(cellSize * exportScale));
+          // inner highlight
+          ctx.strokeStyle = 'rgba(0,180,255,0.12)';
+          ctx.lineWidth = Math.max(1, exportScale);
+          ctx.strokeRect(x + 1, y + 1, Math.round(cellSize * exportScale) - 2, Math.round(cellSize * exportScale) - 2);
+        }
+      }
+    }
+    // red center dot
+    const cx = Math.round((drop.c + 0.5) * cellSize * exportScale);
+    const cy = Math.round((drop.r + 0.5) * cellSize * exportScale);
+    ctx.beginPath();
+    ctx.fillStyle = '#ff2b2b';
+    ctx.arc(cx, cy, Math.max(3, exportScale * 3), 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  // if any image had an error (likely due to CORS), fall back to html2canvas with a helpful message
+  if (anyImageError) {
+    // Attempt a second approach using html2canvas with useCORS; this may still fail but often works for same-origin or permissive CORS
+    try {
+      const fallbackCanvas = await html2canvas(gridEl, {
+        backgroundColor: null,
+        scale: exportScale,
+        useCORS: true,
+        allowTaint: true,
+        foreignObjectRendering: true
+      });
+      const link = document.createElement('a');
+      link.download = 'frost_planner.png';
+      link.href = fallbackCanvas.toDataURL('image/png');
+      link.click();
+
+      // Inform the user why one approach was necessary
+      setTimeout(()=>alert('Note: some external images may be blocked by CORS headers. If defense images are missing, host them on the same origin (e.g. /defenses/ on Vercel) or ensure the image server sends Access-Control-Allow-Origin: *'), 10);
+      return;
+    } catch (err) {
+      console.warn('html2canvas fallback failed:', err);
+      // continue to save the canvas we created (it will include fallbacks for missing images)
+    }
+  }
+
+  // Save the generated canvas
   const link = document.createElement('a');
   link.download = 'frost_planner.png';
   link.href = canvas.toDataURL('image/png');
   link.click();
-});
 
+  if (anyImageError) {
+    setTimeout(()=>alert('Some defense images could not be embedded due to cross-origin restrictions. To guarantee images in exports, place the images under your site (e.g., /defenses/) and update DEFENSE_IMAGES to local paths.'), 50);
+  }
+});
 
 
 /* ========== Export JSON ========== */
@@ -757,7 +931,59 @@ document.addEventListener('keydown', (e)=>{
     redoBtn.click();
   }
 });
+const gridWrapper = document.getElementById('gridWrapper');
 
+gridWrapper.addEventListener('touchstart', e => {
+  if (e.touches.length === 1) {
+    isDraggingPan = true;
+    lastTouch = e.touches[0];
+  }
+  if (e.touches.length === 2) {
+    lastTouch = e.touches;
+  }
+});
+
+gridWrapper.addEventListener('touchmove', e => {
+  e.preventDefault();
+
+  /* PAN */
+  if (e.touches.length === 1 && isDraggingPan) {
+    const t = e.touches[0];
+    panX += t.clientX - lastTouch.clientX;
+    panY += t.clientY - lastTouch.clientY;
+    lastTouch = t;
+    applyTransform();
+  }
+
+  /* PINCH ZOOM */
+  if (e.touches.length === 2) {
+    const [a,b] = e.touches;
+    const newDist = Math.hypot(
+      a.clientX - b.clientX,
+      a.clientY - b.clientY
+    );
+    if (lastTouch.length === 2) {
+      const oldDist = Math.hypot(
+        lastTouch[0].clientX - lastTouch[1].clientX,
+        lastTouch[0].clientY - lastTouch[1].clientY
+      );
+      scale *= newDist / oldDist;
+      scale = Math.min(Math.max(scale, 0.5), 3);
+      applyTransform();
+    }
+    lastTouch = e.touches;
+  }
+}, { passive:false });
+
+gridWrapper.addEventListener('touchend', ()=>{
+  isDraggingPan = false;
+  lastTouch = null;
+});
+
+function applyTransform(){
+  gridEl.style.transform =
+    `translate(${panX}px, ${panY}px) scale(${scale})`;
+}
 </script>
 </body>
 </html>
