@@ -1,0 +1,763 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Clan Capital Frost Planner — Full</title>
+<!-- ======= Styles ======= -->
+<style>
+  :root{
+    --sidebar-w: 260px;
+    --cell-size: 24px;
+    --grid-size: 30;
+  }
+  body {
+    margin: 0;
+    height: 100vh;
+    display: flex;
+    font-family: Inter, system-ui, Arial;
+    background: #f0f2f5;
+  }
+
+  /* Sidebar */
+  #sidebar {
+    width: var(--sidebar-w);
+    padding: 12px;
+    box-sizing: border-box;
+    background: #151a22;
+    color: #fff;
+    display:flex;
+    flex-direction: column;
+    gap:10px;
+  }
+  #sidebar h2 { margin:4px 0 8px 0; font-size:18px; }
+  #controls { display:flex; gap:8px; align-items:center; }
+  .switch{position:relative;width:44px;height:24px}
+  .switch input{display:none}
+  .slider{position:absolute;inset:0;background:#666;border-radius:24px}
+  .slider:before{content:"";position:absolute;left:4px;top:4px;width:16px;height:16px;background:#fff;border-radius:50%;transition:transform .18s}
+  .switch input:checked + .slider{background:#2ea44f}
+  .switch input:checked + .slider:before{transform:translateX(20px)}
+  #modeLabel{font-size:13px;margin-left:6px}
+
+  #defenseScroller {
+    background:#0e1115;
+    padding:8px;
+    border-radius:8px;
+    display:flex;flex-wrap:wrap;gap:8px;max-height:48vh;overflow:auto;
+  }
+  #defenseScroller img {
+    width:46px;height:46px;object-fit:contain;border-radius:6px;background:#222;cursor:grab;
+    border:2px solid transparent;
+  }
+  #defenseScroller img:active{cursor:grabbing}
+
+  button, .small {
+    background:#0c7bdc;border:none;color:white;padding:8px;border-radius:6px;cursor:pointer;font-size:13px;
+  }
+  button.secondary { background:#6c757d;}
+  #exportBtn{width:100%}
+  .hint{font-size:12px;color:#98a0ab;margin-top:6px}
+
+  /* Main Area */
+  #main {
+    flex:1;
+    display:flex;
+    gap:12px;
+    padding:12px;
+    box-sizing:border-box;
+    align-items:flex-start;
+  }
+
+  /* Grid container */
+  #gridArea{
+    background:linear-gradient(#dfe6ee,#e7ecf3);
+    padding:10px;border-radius:8px;
+  }
+
+  #grid {
+    width: calc(var(--cell-size) * var(--grid-size) + 30px);
+    height: calc(var(--cell-size) * var(--grid-size) + 30px);
+    display: grid;
+    grid-template-columns: repeat(var(--grid-size), var(--cell-size));
+    grid-template-rows: repeat(var(--grid-size), var(--cell-size));
+    gap:1px;
+    background: #222;
+    border-radius:6px;
+    position: relative;
+    user-select: none;
+  }
+  .frost-center {
+  position:absolute;
+  width:8px;
+  height:8px;
+  border-radius:50%;
+  background:#ff2b2b;
+  transform:translate(-50%,-50%);
+  pointer-events:none;
+  z-index:5;
+}
+  .cell {
+    width: var(--cell-size);
+    height: var(--cell-size);
+    background: #6b7280;
+    display:flex;align-items:center;justify-content:center;
+    font-size:9px;color:#fff;
+    box-sizing:border-box;
+  }
+
+  .placed {
+    position: relative;
+  }
+  .highlightMode { background: #4b6ef6 !important; color:white; font-size:8px; display:flex;align-items:center;justify-content:center; padding:0; }
+
+  .multiFrostSelect { outline: 2px solid #00e6ff; outline-offset: -2px; }
+
+  .frosted {
+    box-shadow: inset 0 0 0 2px rgba(0,180,255,0.35), 0 0 10px rgba(0,180,255,0.08);
+  }
+
+  .center-marker {
+    position:absolute; width:10px;height:10px;border-radius:50%; background:rgba(255,255,255,0.9); transform: translate(-50%,-50%); pointer-events:none;
+  }
+
+  /* Right side (outputs) */
+  #rightPanel {
+    width:280px;
+    display:flex;flex-direction:column;gap:8px;
+  }
+  .card { background:white;padding:10px;border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.06); }
+  h3 { margin:0 0 8px 0; font-size:14px }
+  #frostList{margin:0;padding:0;list-style:none; max-height:36vh; overflow:auto}
+  #frostList li{padding:6px;border-radius:6px;background:#f6f8fb;margin-bottom:6px;font-size:13px}
+  #historyButtons{display:flex;gap:8px}
+  .muted{color:#6b7280;font-size:12px}
+  .smallInput{width:100%;padding:6px;border-radius:6px;border:1px solid #ddd;margin-top:6px}
+  .foot{font-size:12px;color:#667085;margin-top:6px}
+
+</style>
+</head>
+<body>
+
+  <!-- SIDEBAR -->
+  <div id="sidebar">
+    <h2>Defenses</h2>
+    <div id="controls">
+      <label class="switch">
+        <input type="checkbox" id="modeToggle" checked>
+        <span class="slider"></span>
+      </label>
+      <div id="modeLabel">Image Mode</div>
+    </div>
+
+    <button id="exportBtn">Export Grid PNG</button>
+    <div id="historyButtons">
+      <button id="undoBtn" class="secondary small">Undo</button>
+      <button id="redoBtn" class="secondary small">Redo</button>
+    </div>
+
+    <div class="hint">Drag a defense onto the grid. Click a placed defense to select for frost. Right-click to remove.</div>
+
+    <div id="defenseScroller" aria-label="defense list"></div>
+
+    <div class="hint muted">Toggle Image vs Highlight mode to see images or just colored names.</div>
+  </div>
+
+  <!-- MAIN -->
+  <div id="main">
+    <div id="gridArea">
+      <div id="grid" title="Drop defenses here"></div>
+    </div>
+
+    <!-- RIGHT PANEL -->
+    <div id="rightPanel">
+      <div class="card">
+        <h3>Frost Spell Deployments</h3>
+        <div style="display:flex;gap:8px;margin-bottom:8px">
+          <button id="autoPlaceBtn" class="small">Auto-Place Optimal Frosts</button>
+          <button id="clearSelectionBtn" class="small secondary">Clear Selection</button>
+        </div>
+        <ul id="frostList"></ul>
+        <div class="foot">Radius: <strong>5 tiles</strong>. Drops are placed so each selected defense's center is covered.</div>
+      </div>
+
+      <div class="card">
+        <h3>Actions</h3>
+        <div style="display:flex;gap:6px;margin-bottom:6px">
+          <button id="exportJSON" class="small secondary">Export JSON</button>
+          <button id="loadSample" class="small">Load Sample</button>
+        </div>
+        <div class="muted">You can export layout JSON or the image. Use Load Sample to quickly test.</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- html2canvas for export -->
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
+<script>
+/* ========== CONSTANTS (as provided) ========== */
+const DEFENSE_IMAGES = {
+  "Cannon": "https://static.wikia.nocookie.net/clashofclans/images/9/9a/Cannon5C.png/revision/latest?cb=20231217071942",
+  "Spear Thrower": "https://static.wikia.nocookie.net/clashofclans/images/6/60/Spear_Thrower5.png/revision/latest?cb=20221211225432",
+  "Multi Cannon": "https://static.wikia.nocookie.net/clashofclans/images/2/22/Multi_Cannon5.png/revision/latest?cb=20221203044815",
+  "Bomb Tower": "https://static.wikia.nocookie.net/clashofclans/images/4/4c/Bomb_Tower5C.png/revision/latest?cb=20221225050425",
+  "Super Giant Post": "https://static.wikia.nocookie.net/clashofclans/images/0/04/Super_Giant_Post5.png/revision/latest?cb=20231217050855",
+  "Crusher": "https://static.wikia.nocookie.net/clashofclans/images/e/e2/Crusher5C.png/revision/latest?cb=20221211231154",
+  "Raid Cart Post": "https://static.wikia.nocookie.net/clashofclans/images/f/ff/Raid_Cart_Post5.png/revision/latest?cb=20231217050827",
+  "Air Bombs": "https://static.wikia.nocookie.net/clashofclans/images/a/ae/Air_Bombs5C.png/revision/latest?cb=20231217073805",
+  "Super Wizard Tower": "https://static.wikia.nocookie.net/clashofclans/images/e/e6/Super_Wizard_Tower5.png/revision/latest?cb=20221225050508",
+  "Air Defense": "https://static.wikia.nocookie.net/clashofclans/images/d/d8/Air_Defense5C.png/revision/latest?cb=20221225050449",
+  "Multi Mortar": "https://static.wikia.nocookie.net/clashofclans/images/7/7d/Multi_Mortar5C.png/revision/latest?cb=20221128085751",
+  "Rocket Artillery": "https://static.wikia.nocookie.net/clashofclans/images/c/c4/Rocket_Artillery5.png/revision/latest?cb=20221211225754",
+  "Mega Hidden Tesla": "https://static.wikia.nocookie.net/clashofclans/images/c/cc/Hidden_Mega_Tesla5.png/revision/latest?cb=20231217065740",
+  "Super Dragon Post": "https://static.wikia.nocookie.net/clashofclans/images/a/a2/Super_Dragon_Post4.png/revision/latest?cb=20231217051011",
+  "Goblin Thrower": "https://static.wikia.nocookie.net/clashofclans/images/1/1a/Goblin_Thrower4.png/revision/latest?cb=20231217044602",
+  "Reflector": "https://static.wikia.nocookie.net/clashofclans/images/2/26/Reflector4.png/revision/latest?cb=20221212223911",
+  "Rapid Rockets": "https://static.wikia.nocookie.net/clashofclans/images/7/71/Rapid_Rockets5.png/revision/latest?cb=20231217075223",
+  "Inferno Tower": "https://static.wikia.nocookie.net/clashofclans/images/9/97/Inferno_Tower5C.png/revision/latest?cb=20220507090714",
+  "Giant Cannon": "https://static.wikia.nocookie.net/clashofclans/images/0/07/Giant_Cannon5C.png/revision/latest?cb=20220507083841",
+  "Mini Minion Hive": "https://static.wikia.nocookie.net/clashofclans/images/a/a4/Mini-Minion_Hive4.png/revision/latest?cb=20221213031534",
+  "Blast Bow": "https://static.wikia.nocookie.net/clashofclans/images/7/79/Blast_Bow5.png/revision/latest?cb=20220508102219",
+  "Clan Capital Hall": "https://static.wikia.nocookie.net/clashofclans/images/2/2c/Capital_Hall10.png/revision/latest?cb=20221125041238"
+};
+
+const DEF_SIZES = {
+    "Blast Bow": 4,
+    "Clan Capital Hall": 6,
+    "Cannon": 2,
+    "Spear Thrower": 2,
+    "Multi Cannon": 2,
+    "Bomb Tower": 2,
+    "Super Giant Post": 3,
+    "Crusher": 2,
+    "Raid Cart Post": 3,
+    "Air Bombs": 2,
+    "Super Wizard Tower": 2,
+    "Air Defense": 2,
+    "Multi Mortar": 2,
+    "Rocket Artillery": 3,
+    "Mega Hidden Tesla": 2,
+    "Super Dragon Post": 3,
+    "Goblin Thrower": 3,
+    "Reflector": 2,
+    "Rapid Rockets": 2,
+    "Inferno Tower": 3,
+    "Giant Cannon": 3,
+    "Mini Minion Hive": 3
+};
+
+/* ========== CONFIG ========== */
+const GRID_SIZE = 30;
+const FROST_RADIUS = 5; // tiles
+
+/* ========== DOM ========== */
+const gridEl = document.getElementById('grid');
+const defenseScroller = document.getElementById('defenseScroller');
+const modeToggle = document.getElementById('modeToggle');
+const modeLabel = document.getElementById('modeLabel');
+const frostListEl = document.getElementById('frostList');
+const autoPlaceBtn = document.getElementById('autoPlaceBtn');
+const clearSelectionBtn = document.getElementById('clearSelectionBtn');
+const exportBtn = document.getElementById('exportBtn');
+const exportJSON = document.getElementById('exportJSON');
+const loadSample = document.getElementById('loadSample');
+const undoBtn = document.getElementById('undoBtn');
+const redoBtn = document.getElementById('redoBtn');
+
+/* ========== STATE ========== */
+// placements: array of { id, name, r, c, size }
+// selectedTargets: array of placement ids selected for frost
+// computedDrops: array of {r,c, covers: [placementId,...]}
+let placements = [];
+let selectedTargets = [];
+let computedDrops = []; // result of auto or manual compute
+let nextPlacementId = 1;
+
+/* History snapshots for undo/redo (simple full-state snapshots) */
+let history = [];
+let future = [];
+
+/* ========== HELPERS ========== */
+function cloneState() {
+  return {
+    placements: JSON.parse(JSON.stringify(placements)),
+    selectedTargets: JSON.parse(JSON.stringify(selectedTargets)),
+    computedDrops: JSON.parse(JSON.stringify(computedDrops)),
+    nextPlacementId
+  };
+}
+function restoreState(snapshot) {
+  placements = snapshot.placements;
+  selectedTargets = snapshot.selectedTargets;
+  computedDrops = snapshot.computedDrops;
+  nextPlacementId = snapshot.nextPlacementId;
+  renderAll();
+}
+function saveHistory() {
+  history.push(cloneState());
+  // limit history length to avoid memory blow: keep last 100
+  if (history.length > 100) history.shift();
+  future = [];
+  updateUndoRedoButtons();
+}
+function updateUndoRedoButtons() {
+  undoBtn.disabled = history.length === 0;
+  redoBtn.disabled = future.length === 0;
+}
+
+/* ========== GRID BUILD ========== */
+function buildGrid() {
+  gridEl.innerHTML = '';
+  gridEl.style.setProperty('--grid-size', GRID_SIZE);
+  for (let r=0;r<GRID_SIZE;r++){
+    for (let c=0;c<GRID_SIZE;c++){
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.r = r;
+      cell.dataset.c = c;
+      gridEl.appendChild(cell);
+    }
+  }
+}
+buildGrid();
+
+/* ========== LOAD DEFENSES INTO SIDEBAR ========== */
+function populateSidebar() {
+  defenseScroller.innerHTML = '';
+  Object.keys(DEF_SIZES).forEach(name=>{
+    const img = document.createElement('img');
+    img.draggable = true;
+    img.src = DEFENSE_IMAGES[name] || '';
+    img.title = name;
+    img.alt = name;
+    img.dataset.def = name;
+    img.addEventListener('dragstart', (e)=>{
+      e.dataTransfer.setData('text/defense', name);
+    });
+    defenseScroller.appendChild(img);
+  });
+}
+populateSidebar();
+
+/* ========== Drag & Drop onto Grid ========== */
+gridEl.addEventListener('dragover', e => e.preventDefault());
+gridEl.addEventListener('drop', e => {
+  e.preventDefault();
+  // compute cell under drop - use elementFromPoint
+  let target = document.elementFromPoint(e.clientX, e.clientY);
+  // make sure it's a cell (may be child)
+  while (target && !target.dataset?.r) target = target.parentElement;
+  if (!target) return;
+  const r = parseInt(target.dataset.r,10);
+  const c = parseInt(target.dataset.c,10);
+  const name = e.dataTransfer.getData('text/defense');
+  if (!name) return;
+  placeDefense(name, r, c);
+  saveHistory();
+});
+
+/* ========== Place / Remove / Render Placements ========== */
+function placeDefense(name, r, c) {
+  const size = DEF_SIZES[name] || 2;
+  // bounds check
+  if (r + size > GRID_SIZE || c + size > GRID_SIZE) {
+    alert('Out of bounds: cannot place there.');
+    return;
+  }
+  // check overlap: we disallow overlapping placements
+  for (let p of placements){
+    if (rectsOverlap(r,c,size, p.r, p.c, p.size)) {
+      alert('Overlap with existing defense. Place somewhere else.');
+      return;
+    }
+  }
+  const placement = { id: nextPlacementId++, name, r, c, size };
+  placements.push(placement);
+  renderAll();
+}
+
+function rectsOverlap(r1,c1,s1, r2,c2,s2) {
+  return !(r1 + s1 <= r2 || r2 + s2 <= r1 || c1 + s1 <= c2 || c2 + s2 <= c1);
+}
+
+// Remove a placement by id
+function removePlacementById(id) {
+  const idx = placements.findIndex(p => p.id === id);
+  if (idx === -1) return;
+  placements.splice(idx,1);
+  // also remove from selectedTargets
+  selectedTargets = selectedTargets.filter(x => x !== id);
+  computedDrops = [];
+  renderAll();
+}
+
+/* Render entire grid based on placements, selections and computed drops */
+function renderAll(){
+  // clear cells
+  const cells = gridEl.querySelectorAll('.cell');
+  cells.forEach(cell => {
+    cell.className = 'cell';
+    cell.style.backgroundImage = '';
+    cell.textContent = '';
+    // remove any stretched images
+    const img = cell.querySelector('.defense-image');
+    if (img) img.remove();
+  });
+
+  // render placements
+  for (let p of placements) {
+
+    // mark occupied cells
+    for (let i = 0; i < p.size; i++) {
+      for (let j = 0; j < p.size; j++) {
+        const rr = p.r + i;
+        const cc = p.c + j;
+        const cell = gridEl.querySelector(`[data-r="${rr}"][data-c="${cc}"]`);
+        if (!cell) continue;
+
+        cell.classList.add('placed');
+
+        if (!modeToggle.checked) {
+          cell.classList.add('highlightMode');
+          cell.textContent = p.name[0] ?? '';
+        }
+      }
+    }
+
+    // stretched image (IMAGE MODE ONLY)
+    if (modeToggle.checked) {
+      const tlCell = gridEl.querySelector(
+        `[data-r="${p.r}"][data-c="${p.c}"]`
+      );
+      if (tlCell) {
+        const img = document.createElement('div');
+        img.className = 'defense-image';
+        img.style.position = 'absolute';
+        img.style.left = '0';
+        img.style.top = '0';
+        img.style.width = `${p.size * 100}%`;
+        img.style.height = `${p.size * 100}%`;
+        img.style.backgroundImage = `url(${DEFENSE_IMAGES[p.name] || ''})`;
+        img.style.backgroundSize = 'cover';
+        img.style.backgroundPosition = 'center';
+        img.style.pointerEvents = 'none';
+        img.style.zIndex = '2';
+
+        tlCell.appendChild(img);
+      }
+    }
+
+    // center marker (white dot)
+    const centerR = p.r + Math.floor(p.size / 2);
+    const centerC = p.c + Math.floor(p.size / 2);
+    const centerCell = gridEl.querySelector(
+      `[data-r="${centerR}"][data-c="${centerC}"]`
+    );
+    if (centerCell) {
+      let marker = centerCell.querySelector('.center-marker');
+      if (!marker) {
+        marker = document.createElement('div');
+        marker.className = 'center-marker';
+        centerCell.appendChild(marker);
+      }
+    }
+  }
+
+  // highlight selected targets
+  for (let id of selectedTargets) {
+    const p = placements.find(x => x.id === id);
+    if (!p) continue;
+    for (let i = 0; i < p.size; i++) {
+      for (let j = 0; j < p.size; j++) {
+        const cell = gridEl.querySelector(
+          `[data-r="${p.r + i}"][data-c="${p.c + j}"]`
+        );
+        if (cell) cell.classList.add('multiFrostSelect');
+      }
+    }
+  }
+
+  // frost area + red center dot
+  for (let drop of computedDrops) {
+
+    for (let x = -FROST_RADIUS; x <= FROST_RADIUS; x++) {
+      for (let y = -FROST_RADIUS; y <= FROST_RADIUS; y++) {
+        if (Math.sqrt(x*x + y*y) <= FROST_RADIUS) {
+          const cell = gridEl.querySelector(
+            `[data-r="${drop.r + x}"][data-c="${drop.c + y}"]`
+          );
+          if (cell) cell.classList.add('frosted');
+        }
+      }
+    }
+
+    const centerCell = gridEl.querySelector(
+      `[data-r="${drop.r}"][data-c="${drop.c}"]`
+    );
+    if (centerCell) {
+      let red = centerCell.querySelector('.frost-center');
+      if (!red) {
+        red = document.createElement('div');
+        red.className = 'frost-center';
+        centerCell.appendChild(red);
+      }
+    }
+  }
+
+  // update frost list
+  renderFrostList();
+}
+/* ========== Click handling: select placement for frost, and right-click delete ========== */
+gridEl.addEventListener('click', (e) => {
+  let target = e.target;
+  while (target && !target.dataset?.r) target = target.parentElement;
+  if (!target) return;
+  const r = parseInt(target.dataset.r,10), c = parseInt(target.dataset.c,10);
+  // find placement under this cell
+  const placement = placements.find(p => r >= p.r && r < p.r + p.size && c >= p.c && c < p.c + p.size);
+  if (!placement) return;
+  // toggle selection
+  const idx = selectedTargets.indexOf(placement.id);
+  if (idx === -1) {
+    selectedTargets.push(placement.id);
+  } else {
+    selectedTargets.splice(idx,1);
+  }
+  computedDrops = []; // clear previous computed drops when user toggles selection
+  saveHistory(); // keep selection change in undo history
+  renderAll();
+});
+
+// right click to remove
+gridEl.addEventListener('contextmenu', (e) => {
+  e.preventDefault();
+  let target = e.target;
+  while (target && !target.dataset?.r) target = target.parentElement;
+  if (!target) return;
+  const r = parseInt(target.dataset.r,10), c = parseInt(target.dataset.c,10);
+  const placement = placements.find(p => r >= p.r && r < p.r + p.size && c >= p.c && c < p.c + p.size);
+  if (!placement) return;
+  if (!confirm('Remove placement "'+placement.name+'"?')) return;
+  removePlacementById(placement.id);
+  saveHistory();
+});
+
+/* ========== Clear Selection ========== */
+clearSelectionBtn.addEventListener('click', ()=>{
+  selectedTargets = [];
+  computedDrops = [];
+  saveHistory();
+  renderAll();
+});
+
+/* ========== Manual frost compute (used when selecting single defense from previous design) ========== */
+function computeManualFrostsForSelected() {
+  // For each selected defense, frost shall be placed on the center tile of that defense (as defined).
+  computedDrops = selectedTargets.map(id => {
+    const p = placements.find(x=>x.id===id);
+    const centerR = p.r + Math.floor(p.size/2);
+    const centerC = p.c + Math.floor(p.size/2);
+    return { r: centerR, c: centerC, covers: [p.id] };
+  });
+  renderAll();
+  saveHistory();
+}
+
+/* ========== Render frost list ========== */
+function renderFrostList() {
+  frostListEl.innerHTML = '';
+  if (computedDrops.length === 0) {
+    frostListEl.innerHTML = '<li class="muted">No frost drops computed. Select defenses and use Auto-Place or click a defense to select center drops.</li>';
+    return;
+  }
+  computedDrops.forEach((drop, idx) => {
+    const li = document.createElement('li');
+    const coversNames = (drop.covers || []).map(id => (placements.find(p=>p.id===id)||{}).name).filter(Boolean);
+    li.textContent = `Drop ${idx+1}: at (${drop.r}, ${drop.c}) — covers: ${coversNames.join(', ') || '—'}`;
+    frostListEl.appendChild(li);
+  });
+}
+
+/* ========== Utility: distance, centers list ========== */
+function euclideanDist(aR,aC,bR,bC) {
+  const dx = aR - bR, dy = aC - bC; return Math.sqrt(dx*dx + dy*dy);
+}
+function getSelectedCenters() {
+  // returns array of {id, r, c}
+  return selectedTargets.map(id=>{
+    const p = placements.find(x=>x.id===id);
+    if (!p) return null;
+    return { id: p.id, r: p.r + Math.floor(p.size/2), c: p.c + Math.floor(p.size/2) };
+  }).filter(Boolean);
+}
+
+/* ========== AUTOMATIC OPTIMAL FROST PLACEMENT (Greedy Set Cover) ========== */
+function computeOptimalFrostDrops() {
+  const centers = getSelectedCenters();
+  if (centers.length === 0) {
+    alert('No defenses selected. Click defenses to select them for frost first.');
+    return;
+  }
+
+  // Candidate drop positions: we can limit to all grid cells (any tile can be a drop center).
+  // For speed, we'll use all grid cells, but could also limit to centers of selected defenses and vicinity
+  const candidates = [];
+  for (let r=0; r<GRID_SIZE; r++){
+    for (let c=0; c<GRID_SIZE; c++){
+      candidates.push({ r, c, covers: [] });
+    }
+  }
+
+  // For each candidate compute which centers it covers (distance <= FROST_RADIUS)
+  for (let cand of candidates) {
+    cand.covers = centers.filter(pt => euclideanDist(cand.r,cand.c,pt.r,pt.c) <= FROST_RADIUS).map(pt=>pt.id);
+  }
+
+  // Remove candidates that cover nothing
+  const viable = candidates.filter(c => c.covers.length > 0);
+
+  // Greedy set cover:
+  const uncovered = new Set(centers.map(pt=>pt.id));
+  const drops = [];
+  while (uncovered.size > 0) {
+    // pick candidate that covers max uncovered
+    let best = null; let bestCount = 0;
+    for (let cand of viable) {
+      // count newly covered
+      let cnt = 0;
+      for (let id of cand.covers) if (uncovered.has(id)) cnt++;
+      if (cnt > bestCount) { best = cand; bestCount = cnt; }
+    }
+    if (!best) {
+      // nothing can cover remaining (shouldn't happen)
+      break;
+    }
+    // add drop at best position
+    const coveringIds = best.covers.filter(id => uncovered.has(id));
+    drops.push({ r: best.r, c: best.c, covers: coveringIds.slice() });
+    // mark uncovered as covered
+    coveringIds.forEach(id=>uncovered.delete(id));
+    // Optionally remove candidate from viable, but we can leave
+  }
+
+  // Save computed drops and render
+  computedDrops = drops;
+  saveHistory();
+  renderAll();
+}
+
+/* ========== AUTO BUTTON ========== */
+autoPlaceBtn.addEventListener('click', ()=>{
+  computeOptimalFrostDrops();
+});
+
+/* ========== EXPORT to PNG ========== */
+exportBtn.addEventListener('click', async () => {
+  const grid = document.getElementById('grid');
+
+  // Save original inline styles
+  const prevWidth = grid.style.width;
+  const prevHeight = grid.style.height;
+
+  // Force explicit pixel size so html2canvas can't guess wrong
+  const rect = grid.getBoundingClientRect();
+  grid.style.width = rect.width + 'px';
+  grid.style.height = rect.height + 'px';
+
+  const canvas = await html2canvas(grid, {
+    backgroundColor: null,
+    scale: 2,
+    useCORS: true,
+    allowTaint: true
+  });
+
+  // Restore styles
+  grid.style.width = prevWidth;
+  grid.style.height = prevHeight;
+
+  const link = document.createElement('a');
+  link.download = 'frost_planner.png';
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+});
+
+
+
+/* ========== Export JSON ========== */
+exportJSON.addEventListener('click', ()=>{
+  const exportObj = { placements, selectedTargets, computedDrops, GRID_SIZE, FROST_RADIUS };
+  const blob = new Blob([JSON.stringify(exportObj, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'layout.json'; a.click();
+  URL.revokeObjectURL(url);
+});
+
+/* ========== Load Sample ========== */
+loadSample.addEventListener('click', ()=>{
+  // simple sample layout
+  placements = [
+    { id: 1, name:'Clan Capital Hall', r:12, c:12, size:6 },
+    { id: 2, name:'Cannon', r:8, c:8, size:2 },
+    { id: 3, name:'Inferno Tower', r:15, c:6, size:3 },
+    { id: 4, name:'Rocket Artillery', r:6, c:18, size:3 },
+    { id: 5, name:'Blast Bow', r:18, c:20, size:4 }
+  ];
+  nextPlacementId = 6;
+  selectedTargets = [1,2,4];
+  computedDrops = [];
+  saveHistory();
+  renderAll();
+});
+
+/* ========== Undo / Redo ========== */
+undoBtn.addEventListener('click', ()=>{
+  if (history.length === 0) return;
+  // current state push to future
+  future.push(cloneState());
+  const snapshot = history.pop();
+  restoreState(snapshot);
+  updateUndoRedoButtons();
+});
+
+redoBtn.addEventListener('click', ()=>{
+  if (future.length === 0) return;
+  // push current to history
+  history.push(cloneState());
+  const snapshot = future.pop();
+  restoreState(snapshot);
+  updateUndoRedoButtons();
+});
+
+/* ========== Mode Toggle ========== */
+modeToggle.addEventListener('change', ()=>{
+  modeLabel.textContent = modeToggle.checked ? 'Image Mode' : 'Highlight Mode';
+  renderAll();
+  // we consider mode toggle not to be undoable here (visual only)
+});
+
+/* ========== Initialization & helpers ========== */
+saveHistory(); // push initial empty state
+updateUndoRedoButtons();
+renderAll();
+
+/* Expose manual compute in case user wants center-based frost for every selected target: (not required but handy) */
+window.computeManualFrostsForSelected = computeManualFrostsForSelected;
+
+/* Nice: if user selects placements, we can compute single-center frost automatically (optional): keep computeManualFrostsForSelected not auto-invoked
+   User can choose Auto-Place for optimal or click a placement to select and then call computeManualFrostsForSelected in console if desired.
+*/
+
+/* Accessibility: allow keyboard delete of last selected placement */
+document.addEventListener('keydown', (e)=>{
+  if ((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='z') {
+    undoBtn.click();
+  } else if ((e.ctrlKey||e.metaKey) && (e.shiftKey && e.key.toLowerCase()==='z')) {
+    redoBtn.click();
+  }
+});
+
+</script>
+</body>
+</html>
