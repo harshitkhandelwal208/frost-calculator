@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Clan Capital Frost Planner — Full</title>
+<title>Clan Capital Frost Planner — Fixed</title>
 <!-- ======= Styles ======= -->
 <style>
   :root{
@@ -11,10 +11,7 @@
     --cell-size: 24px;
     --grid-size: 30;
   }
-  #grid {
-  touch-action: none;
-  transform-origin: 0 0;
-}
+  #grid { touch-action: none; transform-origin: 0 0; }
   body {
     margin: 0;
     height: 100vh;
@@ -44,15 +41,15 @@
   .switch input:checked + .slider:before{transform:translateX(20px)}
   #modeLabel{font-size:13px;margin-left:6px}
   .frost-center {
-  position:absolute;
-  width:8px;
-  height:8px;
-  border-radius:50%;
-  background:#ff2b2b;
-  transform:translate(-50%,-50%);
-  pointer-events:none;
-  z-index:5;
-}
+    position:absolute;
+    width:8px;
+    height:8px;
+    border-radius:50%;
+    background:#ff2b2b;
+    transform:translate(-50%,-50%);
+    pointer-events:none;
+    z-index:5;
+  }
 
   #defenseScroller {
     background:#0e1115;
@@ -82,6 +79,16 @@
     box-sizing:border-box;
     align-items:flex-start;
   }
+  #gridArea {
+    touch-action: none; /* disable browser gestures */
+    overflow: hidden;
+    position: relative;
+  }
+
+  #grid {
+    transform-origin: 0 0;
+    transition: transform 0.05s linear;
+  }
 
   /* Grid container */
   #gridArea{
@@ -89,9 +96,9 @@
     padding:10px;border-radius:8px;
   }
   #gridWrapper{
-  overflow: hidden;
-  touch-action: none;
-}
+    overflow: hidden;
+    touch-action: none;
+  }
 
   #grid {
     width: calc(var(--cell-size) * var(--grid-size) + 30px);
@@ -113,6 +120,7 @@
     display:flex;align-items:center;justify-content:center;
     font-size:9px;color:#fff;
     box-sizing:border-box;
+    position:relative;
   }
 
   .placed {
@@ -144,6 +152,28 @@
   .smallInput{width:100%;padding:6px;border-radius:6px;border:1px solid #ddd;margin-top:6px}
   .foot{font-size:12px;color:#667085;margin-top:6px}
 
+/* Mobile-friendly layout */
+@media (max-width: 768px) {
+  #main {
+    flex-direction: column;   /* stack grid and right panel vertically */
+    gap: 8px;
+  }
+
+  #gridArea {
+    width: 100%;              /* full width for the grid */
+    overflow-x: auto;         /* allow horizontal scroll if needed */
+  }
+
+  #rightPanel {
+    width: 100%;              /* full width below the grid */
+    order: 2;                 /* appears below the grid */
+  }
+
+  #sidebar {
+    width: 100%;              /* sidebar full width at top */
+  }
+}
+
 </style>
 </head>
 <body>
@@ -164,7 +194,13 @@
       <button id="undoBtn" class="secondary small">Undo</button>
       <button id="redoBtn" class="secondary small">Redo</button>
     </div>
-
+    <div id="editControls" style="display:flex; gap:6px; align-items:center;">
+        <label class="switch">
+          <input type="checkbox" id="editToggle">
+          <span class="slider"></span>
+        </label>
+        <div id="editLabel">Edit Mode</div>
+      </div>
     <div class="hint">Drag a defense onto the grid. Click a placed defense to select for frost. Right-click to remove.</div>
 
     <div id="defenseScroller" aria-label="defense list"></div>
@@ -178,8 +214,6 @@
         <div id="gridWrapper">
           <div id="grid"></div>
         </div>
-      </div>
-      
     </div>
 
     <!-- RIGHT PANEL -->
@@ -210,7 +244,7 @@
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 
 <script>
-/* ========== CONSTANTS (as provided) ========== */
+/* ========== CONSTANTS ========== */
 const DEFENSE_IMAGES = {
   "Cannon": "/defenses/Cannon5C.webp",
   "Spear Thrower": "/defenses/Spear_Thrower5.webp",
@@ -261,38 +295,12 @@ const DEF_SIZES = {
     "Mini Minion Hive": 3
 };
 
-// ---------- Image preloader ----------
-const IMAGE_CACHE = {}; // name -> { img: Image, loaded: boolean, error: boolean }
-
-function preloadDefenseImages() {
-  Object.keys(DEFENSE_IMAGES).forEach(name => {
-    const url = DEFENSE_IMAGES[name];
-    const img = new Image();
-    // Try to request anonymous CORS so canvas can read pixels when possible
-    img.crossOrigin = 'anonymous';
-    img.src = url;
-
-    IMAGE_CACHE[name] = { img, loaded: false, error: false };
-
-    img.onload = () => {
-      IMAGE_CACHE[name].loaded = true;
-    };
-    img.onerror = () => {
-      IMAGE_CACHE[name].error = true;
-      console.warn(`Failed to load image for ${name} — CORS or network may block it:`, url);
-    };
-  });
-}
-// call once
-preloadDefenseImages();
-
-
-/* ========== CONFIG ========== */
 const GRID_SIZE = 30;
 const FROST_RADIUS = 5; // tiles
 
 /* ========== DOM ========== */
 const gridEl = document.getElementById('grid');
+const gridWrapper = document.getElementById('gridWrapper'); // moved up so handlers can use it
 const defenseScroller = document.getElementById('defenseScroller');
 const modeToggle = document.getElementById('modeToggle');
 const modeLabel = document.getElementById('modeLabel');
@@ -304,26 +312,37 @@ const exportJSON = document.getElementById('exportJSON');
 const loadSample = document.getElementById('loadSample');
 const undoBtn = document.getElementById('undoBtn');
 const redoBtn = document.getElementById('redoBtn');
-let armedDefense = null;      // for mobile tap-to-place
-let isDraggingPan = false;
-let lastTouch = null;
-let scale = 1;
-let panX = 0;
-let panY = 0;
+
 /* ========== STATE ========== */
-// placements: array of { id, name, r, c, size }
-// selectedTargets: array of placement ids selected for frost
-// computedDrops: array of {r,c, covers: [placementId,...]}
 let placements = [];
 let selectedTargets = [];
-let computedDrops = []; // result of auto or manual compute
+let computedDrops = [];
 let nextPlacementId = 1;
 
-/* History snapshots for undo/redo (simple full-state snapshots) */
 let history = [];
 let future = [];
 
-/* ========== HELPERS ========== */
+let armedDefense = null;
+
+let posX = 0, posY = 0, scale = 1;
+let isPanning = false;
+let lastPointer = null;
+
+const IMAGE_CACHE = {};
+function preloadDefenseImages(){
+  Object.keys(DEFENSE_IMAGES).forEach(name=>{
+    const url = DEFENSE_IMAGES[name];
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = url;
+    IMAGE_CACHE[name] = { img, loaded:false, error:false };
+    img.onload = () => IMAGE_CACHE[name].loaded = true;
+    img.onerror = () => IMAGE_CACHE[name].error = true;
+  });
+}
+preloadDefenseImages();
+
+/* ========== HELPERS (history, render, utils) ========== */
 function cloneState() {
   return {
     placements: JSON.parse(JSON.stringify(placements)),
@@ -341,7 +360,6 @@ function restoreState(snapshot) {
 }
 function saveHistory() {
   history.push(cloneState());
-  // limit history length to avoid memory blow: keep last 100
   if (history.length > 100) history.shift();
   future = [];
   updateUndoRedoButtons();
@@ -351,12 +369,12 @@ function updateUndoRedoButtons() {
   redoBtn.disabled = future.length === 0;
 }
 
-/* ========== GRID BUILD ========== */
+/* Build grid DOM */
 function buildGrid() {
   gridEl.innerHTML = '';
   gridEl.style.setProperty('--grid-size', GRID_SIZE);
-  for (let r=0;r<GRID_SIZE;r++){
-    for (let c=0;c<GRID_SIZE;c++){
+  for (let r = 0; r < GRID_SIZE; r++) {
+    for (let c = 0; c < GRID_SIZE; c++) {
       const cell = document.createElement('div');
       cell.className = 'cell';
       cell.dataset.r = r;
@@ -367,110 +385,103 @@ function buildGrid() {
 }
 buildGrid();
 
-/* ========== LOAD DEFENSES INTO SIDEBAR ========== */
+/* Populate sidebar (fixed click-to-arm) */
 function populateSidebar() {
   defenseScroller.innerHTML = '';
-  Object.keys(DEF_SIZES).forEach(name=>{
+  Object.keys(DEF_SIZES).forEach(name => {
     const img = document.createElement('img');
     img.draggable = true;
     img.src = DEFENSE_IMAGES[name] || '';
     img.title = name;
     img.alt = name;
     img.dataset.def = name;
-    img.addEventListener('dragstart', (e)=>{
-  e.dataTransfer.setData('text/defense', name);
-});
 
-/* MOBILE TAP SELECT */
-img.addEventListener('click', ()=>{
-  armedDefense = name;
-  [...defenseScroller.children].forEach(i=>i.style.outline='');
-  img.style.outline = '2px solid #4b6ef6';
-});
+    img.addEventListener('dragstart', (e) => {
+      e.dataTransfer.setData('text/defense', name);
+    });
+
+    img.addEventListener('click', () => {
+      armedDefense = name;
+      [...defenseScroller.children].forEach(i => i.style.outline = '');
+      img.style.outline = '2px solid #4b6ef6';
+    });
 
     defenseScroller.appendChild(img);
   });
 }
 populateSidebar();
 
-/* ========== Drag & Drop onto Grid ========== */
-gridEl.addEventListener('dragover', e => e.preventDefault());
-gridEl.addEventListener('drop', e => {
-  e.preventDefault();
-  // compute cell under drop - use elementFromPoint
-  let target = document.elementFromPoint(e.clientX, e.clientY);
-  // make sure it's a cell (may be child)
-  while (target && !target.dataset?.r) target = target.parentElement;
-  if (!target) return;
-  const r = parseInt(target.dataset.r,10);
-  const c = parseInt(target.dataset.c,10);
-  const name = e.dataTransfer.getData('text/defense');
-  if (!name) return;
-  placeDefense(name, r, c);
-  saveHistory();
-});
+/* Utility: transform-aware coordinate conversion */
+function getTransformedPoint(clientX, clientY) {
+  let el = document.elementFromPoint(clientX, clientY);
+  while (el && !el.dataset?.r) el = el.parentElement;
+  if (el && el.dataset?.r) {
+    return { r: parseInt(el.dataset.r, 10), c: parseInt(el.dataset.c, 10) };
+  }
 
-/* ========== Place / Remove / Render Placements ========== */
+  const rect = gridEl.getBoundingClientRect();
+  const x = (clientX - rect.left - posX) / scale;
+  const y = (clientY - rect.top - posY) / scale;
+  const cellSizeStr = getComputedStyle(document.documentElement).getPropertyValue('--cell-size') || '24';
+  const cellSize = parseFloat(cellSizeStr);
+
+  return { r: Math.floor(y / cellSize), c: Math.floor(x / cellSize) };
+}
+
+/* Add/remove placements */
+function rectsOverlap(r1,c1,s1, r2,c2,s2) {
+  return !(r1 + s1 <= r2 || r2 + s2 <= r1 || c1 + s1 <= c2 || c2 + s2 <= c1);
+}
 function placeDefense(name, r, c) {
   const size = DEF_SIZES[name] || 2;
-  // bounds check
-  if (r + size > GRID_SIZE || c + size > GRID_SIZE) {
+  if (r < 0 || c < 0 || r + size > GRID_SIZE || c + size > GRID_SIZE) {
     alert('Out of bounds: cannot place there.');
     return;
   }
-  // check overlap: we disallow overlapping placements
-  for (let p of placements){
+  for (let p of placements) {
     if (rectsOverlap(r,c,size, p.r, p.c, p.size)) {
       alert('Overlap with existing defense. Place somewhere else.');
       return;
     }
   }
-  const placement = { id: nextPlacementId++, name, r, c, size };
-  placements.push(placement);
+  placements.push({ id: nextPlacementId++, name, r, c, size });
   renderAll();
 }
-
-function rectsOverlap(r1,c1,s1, r2,c2,s2) {
-  return !(r1 + s1 <= r2 || r2 + s2 <= r1 || c1 + s1 <= c2 || c2 + s2 <= c1);
-}
-
-// Remove a placement by id
 function removePlacementById(id) {
   const idx = placements.findIndex(p => p.id === id);
   if (idx === -1) return;
   placements.splice(idx,1);
-  // also remove from selectedTargets
   selectedTargets = selectedTargets.filter(x => x !== id);
   computedDrops = [];
   renderAll();
 }
 
-/* Render entire grid based on placements, selections and computed drops */
+/* Render all (considers temporary _tempR/_tempC) */
 function renderAll(){
-  // clear cells
   const cells = gridEl.querySelectorAll('.cell');
   cells.forEach(cell => {
     cell.className = 'cell';
     cell.style.backgroundImage = '';
     cell.textContent = '';
-    // remove any stretched images
     const img = cell.querySelector('.defense-image');
     if (img) img.remove();
+    const cm = cell.querySelector('.center-marker');
+    if (cm) cm.remove();
+    const fc = cell.querySelector('.frost-center');
+    if (fc) fc.remove();
   });
 
-  // render placements
   for (let p of placements) {
+    const baseR = (typeof p._tempR === 'number') ? p._tempR : p.r;
+    const baseC = (typeof p._tempC === 'number') ? p._tempC : p.c;
 
-    // mark occupied cells
     for (let i = 0; i < p.size; i++) {
       for (let j = 0; j < p.size; j++) {
-        const rr = p.r + i;
-        const cc = p.c + j;
+        const rr = baseR + i;
+        const cc = baseC + j;
         const cell = gridEl.querySelector(`[data-r="${rr}"][data-c="${cc}"]`);
         if (!cell) continue;
-
         cell.classList.add('placed');
-
         if (!modeToggle.checked) {
           cell.classList.add('highlightMode');
           cell.textContent = p.name[0] ?? '';
@@ -478,11 +489,8 @@ function renderAll(){
       }
     }
 
-    // stretched image (IMAGE MODE ONLY)
     if (modeToggle.checked) {
-      const tlCell = gridEl.querySelector(
-        `[data-r="${p.r}"][data-c="${p.c}"]`
-      );
+      const tlCell = gridEl.querySelector(`[data-r="${baseR}"][data-c="${baseC}"]`);
       if (tlCell) {
         const img = document.createElement('div');
         img.className = 'defense-image';
@@ -496,17 +504,13 @@ function renderAll(){
         img.style.backgroundPosition = 'center';
         img.style.pointerEvents = 'none';
         img.style.zIndex = '2';
-
         tlCell.appendChild(img);
       }
     }
 
-    // center marker (white dot)
-    const centerR = p.r + Math.floor(p.size / 2);
-    const centerC = p.c + Math.floor(p.size / 2);
-    const centerCell = gridEl.querySelector(
-      `[data-r="${centerR}"][data-c="${centerC}"]`
-    );
+    const centerR = baseR + Math.floor(p.size / 2);
+    const centerC = baseC + Math.floor(p.size / 2);
+    const centerCell = gridEl.querySelector(`[data-r="${centerR}"][data-c="${centerC}"]`);
     if (centerCell) {
       let marker = centerCell.querySelector('.center-marker');
       if (!marker) {
@@ -517,37 +521,29 @@ function renderAll(){
     }
   }
 
-  // highlight selected targets
   for (let id of selectedTargets) {
     const p = placements.find(x => x.id === id);
     if (!p) continue;
+    const baseR = (typeof p._tempR === 'number') ? p._tempR : p.r;
+    const baseC = (typeof p._tempC === 'number') ? p._tempC : p.c;
     for (let i = 0; i < p.size; i++) {
       for (let j = 0; j < p.size; j++) {
-        const cell = gridEl.querySelector(
-          `[data-r="${p.r + i}"][data-c="${p.c + j}"]`
-        );
+        const cell = gridEl.querySelector(`[data-r="${baseR + i}"][data-c="${baseC + j}"]`);
         if (cell) cell.classList.add('multiFrostSelect');
       }
     }
   }
 
-  // frost area + red center dot
   for (let drop of computedDrops) {
-
     for (let x = -FROST_RADIUS; x <= FROST_RADIUS; x++) {
       for (let y = -FROST_RADIUS; y <= FROST_RADIUS; y++) {
         if (Math.sqrt(x*x + y*y) <= FROST_RADIUS) {
-          const cell = gridEl.querySelector(
-            `[data-r="${drop.r + x}"][data-c="${drop.c + y}"]`
-          );
+          const cell = gridEl.querySelector(`[data-r="${drop.r + x}"][data-c="${drop.c + y}"]`);
           if (cell) cell.classList.add('frosted');
         }
       }
     }
-
-    const centerCell = gridEl.querySelector(
-      `[data-r="${drop.r}"][data-c="${drop.c}"]`
-    );
+    const centerCell = gridEl.querySelector(`[data-r="${drop.r}"][data-c="${drop.c}"]`);
     if (centerCell) {
       let red = centerCell.querySelector('.frost-center');
       if (!red) {
@@ -558,80 +554,10 @@ function renderAll(){
     }
   }
 
-  // update frost list
   renderFrostList();
 }
-/* ========== Click handling: select placement for frost, and right-click delete ========== */
-gridEl.addEventListener('click', (e) => {
-  let target = e.target;
-  while (target && !target.dataset?.r) target = target.parentElement;
-  if (!target) return;
 
-  const r = parseInt(target.dataset.r,10);
-  const c = parseInt(target.dataset.c,10);
-
-  /* 👉 MOBILE TAP-TO-PLACE */
-  if (armedDefense) {
-    placeDefense(armedDefense, r, c);
-    saveHistory();
-    armedDefense = null;
-    [...defenseScroller.children].forEach(i=>i.style.outline='');
-    return;
-  }
-
-  /* 👉 EXISTING FROST SELECTION */
-  const placement = placements.find(p =>
-    r >= p.r && r < p.r + p.size &&
-    c >= p.c && c < p.c + p.size
-  );
-  if (!placement) return;
-
-  const idx = selectedTargets.indexOf(placement.id);
-  if (idx === -1) selectedTargets.push(placement.id);
-  else selectedTargets.splice(idx,1);
-
-  computedDrops = [];
-  saveHistory();
-  renderAll();
-});
-
-
-// right click to remove
-gridEl.addEventListener('contextmenu', (e) => {
-  e.preventDefault();
-  let target = e.target;
-  while (target && !target.dataset?.r) target = target.parentElement;
-  if (!target) return;
-  const r = parseInt(target.dataset.r,10), c = parseInt(target.dataset.c,10);
-  const placement = placements.find(p => r >= p.r && r < p.r + p.size && c >= p.c && c < p.c + p.size);
-  if (!placement) return;
-  if (!confirm('Remove placement "'+placement.name+'"?')) return;
-  removePlacementById(placement.id);
-  saveHistory();
-});
-
-/* ========== Clear Selection ========== */
-clearSelectionBtn.addEventListener('click', ()=>{
-  selectedTargets = [];
-  computedDrops = [];
-  saveHistory();
-  renderAll();
-});
-
-/* ========== Manual frost compute (used when selecting single defense from previous design) ========== */
-function computeManualFrostsForSelected() {
-  // For each selected defense, frost shall be placed on the center tile of that defense (as defined).
-  computedDrops = selectedTargets.map(id => {
-    const p = placements.find(x=>x.id===id);
-    const centerR = p.r + Math.floor(p.size/2);
-    const centerC = p.c + Math.floor(p.size/2);
-    return { r: centerR, c: centerC, covers: [p.id] };
-  });
-  renderAll();
-  saveHistory();
-}
-
-/* ========== Render frost list ========== */
+/* Render frost list */
 function renderFrostList() {
   frostListEl.innerHTML = '';
   if (computedDrops.length === 0) {
@@ -646,12 +572,11 @@ function renderFrostList() {
   });
 }
 
-/* ========== Utility: distance, centers list ========== */
+/* Utility: selected centers */
 function euclideanDist(aR,aC,bR,bC) {
   const dx = aR - bR, dy = aC - bC; return Math.sqrt(dx*dx + dy*dy);
 }
 function getSelectedCenters() {
-  // returns array of {id, r, c}
   return selectedTargets.map(id=>{
     const p = placements.find(x=>x.id===id);
     if (!p) return null;
@@ -659,7 +584,7 @@ function getSelectedCenters() {
   }).filter(Boolean);
 }
 
-/* ========== AUTOMATIC OPTIMAL FROST PLACEMENT (Greedy Set Cover) ========== */
+/* ========== AUTO OPTIMAL FROST (greedy set cover) ========== */
 function computeOptimalFrostDrops() {
   const centers = getSelectedCenters();
   if (centers.length === 0) {
@@ -667,8 +592,6 @@ function computeOptimalFrostDrops() {
     return;
   }
 
-  // Candidate drop positions: we can limit to all grid cells (any tile can be a drop center).
-  // For speed, we'll use all grid cells, but could also limit to centers of selected defenses and vicinity
   const candidates = [];
   for (let r=0; r<GRID_SIZE; r++){
     for (let c=0; c<GRID_SIZE; c++){
@@ -676,111 +599,83 @@ function computeOptimalFrostDrops() {
     }
   }
 
-  // For each candidate compute which centers it covers (distance <= FROST_RADIUS)
   for (let cand of candidates) {
     cand.covers = centers.filter(pt => euclideanDist(cand.r,cand.c,pt.r,pt.c) <= FROST_RADIUS).map(pt=>pt.id);
   }
-
-  // Remove candidates that cover nothing
   const viable = candidates.filter(c => c.covers.length > 0);
 
-  // Greedy set cover:
   const uncovered = new Set(centers.map(pt=>pt.id));
   const drops = [];
   while (uncovered.size > 0) {
-    // pick candidate that covers max uncovered
     let best = null; let bestCount = 0;
     for (let cand of viable) {
-      // count newly covered
       let cnt = 0;
       for (let id of cand.covers) if (uncovered.has(id)) cnt++;
       if (cnt > bestCount) { best = cand; bestCount = cnt; }
     }
-    if (!best) {
-      // nothing can cover remaining (shouldn't happen)
-      break;
-    }
-    // add drop at best position
+    if (!best) break;
     const coveringIds = best.covers.filter(id => uncovered.has(id));
     drops.push({ r: best.r, c: best.c, covers: coveringIds.slice() });
-    // mark uncovered as covered
     coveringIds.forEach(id=>uncovered.delete(id));
-    // Optionally remove candidate from viable, but we can leave
   }
-
-  // Save computed drops and render
   computedDrops = drops;
   saveHistory();
   renderAll();
 }
 
-/* ========== AUTO BUTTON ========== */
-autoPlaceBtn.addEventListener('click', ()=>{
-  computeOptimalFrostDrops();
-});
+/* Manual center-based compute */
+function computeManualFrostsForSelected() {
+  computedDrops = selectedTargets.map(id => {
+    const p = placements.find(x=>x.id===id);
+    const centerR = p.r + Math.floor(p.size/2);
+    const centerC = p.c + Math.floor(p.size/2);
+    return { r: centerR, c: centerC, covers: [p.id] };
+  });
+  renderAll();
+  saveHistory();
+}
+window.computeManualFrostsForSelected = computeManualFrostsForSelected;
 
-/* ========== EXPORT to PNG ========== */
-// ---------- Robust export (replaces previous exportBtn handler) ----------
+/* ========== EXPORT PNG (robust) ========== */
 exportBtn.addEventListener('click', async () => {
-  // Size calculations: compute pixel size from CSS variables
   const cellSize = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cell-size')) || 24;
   const gridPixelsW = GRID_SIZE * cellSize;
   const gridPixelsH = GRID_SIZE * cellSize;
-
-  // allow the user to choose scale for higher-res exports
   const exportScale = 2;
 
-  // create offscreen canvas
   const canvas = document.createElement('canvas');
   canvas.width = Math.round(gridPixelsW * exportScale);
   canvas.height = Math.round(gridPixelsH * exportScale);
   const ctx = canvas.getContext('2d');
 
-  // optional: white background
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // draw grid background similar to your UI (tiles background)
-  // You can customize tile color; using same as .cell background
   for (let r = 0; r < GRID_SIZE; r++) {
     for (let c = 0; c < GRID_SIZE; c++) {
       const x = Math.round(c * cellSize * exportScale);
       const y = Math.round(r * cellSize * exportScale);
-      ctx.fillStyle = '#6b7280'; // default cell color
+      ctx.fillStyle = '#6b7280';
       ctx.fillRect(x, y, Math.round(cellSize * exportScale), Math.round(cellSize * exportScale));
-      // small gap (grid line) as in your CSS (gap:1px)
-      // draw gap as darker line on right and bottom
       ctx.fillStyle = '#222';
       ctx.fillRect(x + Math.round(cellSize * exportScale) - Math.round(1 * exportScale), y, Math.round(1 * exportScale), Math.round(cellSize * exportScale));
       ctx.fillRect(x, y + Math.round(cellSize * exportScale) - Math.round(1 * exportScale), Math.round(cellSize * exportScale), Math.round(1 * exportScale));
     }
   }
 
-  // draw placements: images stretched across their footprint
-  // track if any image had a CORS error or didn't load
   let anyImageError = false;
-
   for (let p of placements) {
     const px = Math.round(p.c * cellSize * exportScale);
     const py = Math.round(p.r * cellSize * exportScale);
     const pw = Math.round(p.size * cellSize * exportScale);
     const ph = Math.round(p.size * cellSize * exportScale);
-
-    // draw a subtle cell background for placed defenses (matches UI)
     ctx.fillStyle = '#6b7280';
     ctx.fillRect(px, py, pw, ph);
-
     const cache = IMAGE_CACHE[p.name];
     if (cache && cache.loaded && !cache.error) {
-      try {
-        // draw the cached image stretched
-        ctx.drawImage(cache.img, px, py, pw, ph);
-      } catch (err) {
-        console.warn('drawImage failed for', p.name, err);
-        anyImageError = true;
-      }
+      try { ctx.drawImage(cache.img, px, py, pw, ph); }
+      catch (err) { anyImageError = true; console.warn('drawImage failed for', p.name, err); }
     } else {
-      // image not available — mark as missing and draw the name as fallback
       anyImageError = anyImageError || (cache && cache.error);
       ctx.fillStyle = '#222';
       ctx.fillRect(px, py, pw, ph);
@@ -792,10 +687,9 @@ exportBtn.addEventListener('click', async () => {
     }
   }
 
-  // draw frost overlays (use same style as .frosted)
   for (let drop of computedDrops) {
-    for (let dx = -FROST_RADIUS; dx <= FROST_RADIUS; dx++) {
-      for (let dy = -FROST_RADIUS; dy <= FROST_RADIUS; dy++) {
+    for (let dx=-FROST_RADIUS; dx<=FROST_RADIUS; dx++){
+      for (let dy=-FROST_RADIUS; dy<=FROST_RADIUS; dy++){
         const dist = Math.sqrt(dx*dx + dy*dy);
         if (dist <= FROST_RADIUS) {
           const rr = drop.r + dx;
@@ -803,17 +697,14 @@ exportBtn.addEventListener('click', async () => {
           if (rr < 0 || rr >= GRID_SIZE || cc < 0 || cc >= GRID_SIZE) continue;
           const x = Math.round(cc * cellSize * exportScale);
           const y = Math.round(rr * cellSize * exportScale);
-          // draw a translucent blue overlay
           ctx.fillStyle = 'rgba(0,180,255,0.08)';
           ctx.fillRect(x, y, Math.round(cellSize * exportScale), Math.round(cellSize * exportScale));
-          // inner highlight
           ctx.strokeStyle = 'rgba(0,180,255,0.12)';
           ctx.lineWidth = Math.max(1, exportScale);
           ctx.strokeRect(x + 1, y + 1, Math.round(cellSize * exportScale) - 2, Math.round(cellSize * exportScale) - 2);
         }
       }
     }
-    // red center dot
     const cx = Math.round((drop.c + 0.5) * cellSize * exportScale);
     const cy = Math.round((drop.r + 0.5) * cellSize * exportScale);
     ctx.beginPath();
@@ -822,9 +713,7 @@ exportBtn.addEventListener('click', async () => {
     ctx.fill();
   }
 
-  // if any image had an error (likely due to CORS), fall back to html2canvas with a helpful message
   if (anyImageError) {
-    // Attempt a second approach using html2canvas with useCORS; this may still fail but often works for same-origin or permissive CORS
     try {
       const fallbackCanvas = await html2canvas(gridEl, {
         backgroundColor: null,
@@ -837,29 +726,24 @@ exportBtn.addEventListener('click', async () => {
       link.download = 'frost_planner.png';
       link.href = fallbackCanvas.toDataURL('image/png');
       link.click();
-
-      // Inform the user why one approach was necessary
-      setTimeout(()=>alert('Note: some external images may be blocked by CORS headers. If defense images are missing, host them on the same origin (e.g. /defenses/ on Vercel) or ensure the image server sends Access-Control-Allow-Origin: *'), 10);
+      setTimeout(()=>alert('Note: some external images may be blocked by CORS headers. If defense images are missing, host them on the same origin or allow CORS.'), 20);
       return;
     } catch (err) {
       console.warn('html2canvas fallback failed:', err);
-      // continue to save the canvas we created (it will include fallbacks for missing images)
     }
   }
 
-  // Save the generated canvas
   const link = document.createElement('a');
   link.download = 'frost_planner.png';
   link.href = canvas.toDataURL('image/png');
   link.click();
 
   if (anyImageError) {
-    setTimeout(()=>alert('Some defense images could not be embedded due to cross-origin restrictions. To guarantee images in exports, place the images under your site (e.g., /defenses/) and update DEFENSE_IMAGES to local paths.'), 50);
+    setTimeout(()=>alert('Some defense images could not be embedded due to cross-origin restrictions. To guarantee images in exports, place the images under your site and update DEFENSE_IMAGES to local paths.'), 50);
   }
 });
 
-
-/* ========== Export JSON ========== */
+/* Export JSON */
 exportJSON.addEventListener('click', ()=>{
   const exportObj = { placements, selectedTargets, computedDrops, GRID_SIZE, FROST_RADIUS };
   const blob = new Blob([JSON.stringify(exportObj, null, 2)], {type:'application/json'});
@@ -868,9 +752,8 @@ exportJSON.addEventListener('click', ()=>{
   URL.revokeObjectURL(url);
 });
 
-/* ========== Load Sample ========== */
+/* Load sample */
 loadSample.addEventListener('click', ()=>{
-  // simple sample layout
   placements = [
     { id: 1, name:'Clan Capital Hall', r:12, c:12, size:6 },
     { id: 2, name:'Cannon', r:8, c:8, size:2 },
@@ -885,45 +768,40 @@ loadSample.addEventListener('click', ()=>{
   renderAll();
 });
 
-/* ========== Undo / Redo ========== */
+/* Undo/Redo */
 undoBtn.addEventListener('click', ()=>{
   if (history.length === 0) return;
-  // current state push to future
   future.push(cloneState());
   const snapshot = history.pop();
   restoreState(snapshot);
   updateUndoRedoButtons();
 });
-
 redoBtn.addEventListener('click', ()=>{
   if (future.length === 0) return;
-  // push current to history
   history.push(cloneState());
   const snapshot = future.pop();
   restoreState(snapshot);
   updateUndoRedoButtons();
 });
 
-/* ========== Mode Toggle ========== */
+/* Mode toggle */
 modeToggle.addEventListener('change', ()=>{
   modeLabel.textContent = modeToggle.checked ? 'Image Mode' : 'Highlight Mode';
   renderAll();
-  // we consider mode toggle not to be undoable here (visual only)
 });
 
-/* ========== Initialization & helpers ========== */
-saveHistory(); // push initial empty state
-updateUndoRedoButtons();
-renderAll();
+/* Clear selection */
+clearSelectionBtn.addEventListener('click', ()=>{
+  selectedTargets = [];
+  computedDrops = [];
+  saveHistory();
+  renderAll();
+});
 
-/* Expose manual compute in case user wants center-based frost for every selected target: (not required but handy) */
-window.computeManualFrostsForSelected = computeManualFrostsForSelected;
+/* Auto-place */
+autoPlaceBtn.addEventListener('click', ()=> computeOptimalFrostDrops());
 
-/* Nice: if user selects placements, we can compute single-center frost automatically (optional): keep computeManualFrostsForSelected not auto-invoked
-   User can choose Auto-Place for optimal or click a placement to select and then call computeManualFrostsForSelected in console if desired.
-*/
-
-/* Accessibility: allow keyboard delete of last selected placement */
+/* Keyboard shortcuts */
 document.addEventListener('keydown', (e)=>{
   if ((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='z') {
     undoBtn.click();
@@ -931,59 +809,238 @@ document.addEventListener('keydown', (e)=>{
     redoBtn.click();
   }
 });
-const gridWrapper = document.getElementById('gridWrapper');
 
-gridWrapper.addEventListener('touchstart', e => {
-  if (e.touches.length === 1) {
-    isDraggingPan = true;
-    lastTouch = e.touches[0];
+/* Render initial state */
+saveHistory();
+updateUndoRedoButtons();
+renderAll();
+
+/* ========== Pointer/Drag events for placing & moving (single system) ========== */
+let dragPlacement = null;
+let dragOffsetR = 0;
+let dragOffsetC = 0;
+
+/* Mousedown for dragging a placed defense (only in edit mode) or start panning */
+gridEl.addEventListener('pointerdown', (e) => {
+  if (e.isPrimary === false) return;
+  const { r, c } = getTransformedPoint(e.clientX, e.clientY);
+
+  if (document.getElementById('editToggle').checked) {
+    const placement = placements.find(p => r >= p.r && r < p.r + p.size && c >= p.c && c < p.c + p.size);
+    if (placement) {
+      dragPlacement = placement;
+      dragOffsetR = r - placement.r;
+      dragOffsetC = c - placement.c;
+      e.preventDefault();
+      return;
+    }
   }
-  if (e.touches.length === 2) {
-    lastTouch = e.touches;
+
+  isPanning = true;
+  lastPointer = { x: e.clientX, y: e.clientY };
+  gridEl.setPointerCapture(e.pointerId);
+});
+
+/* Pointer move */
+gridEl.addEventListener('pointermove', (e) => {
+  if (dragPlacement) {
+    const { r, c } = getTransformedPoint(e.clientX, e.clientY);
+    const newR = r - dragOffsetR;
+    const newC = c - dragOffsetC;
+    dragPlacement._tempR = newR;
+    dragPlacement._tempC = newC;
+    renderAll();
+    return;
+  }
+  if (isPanning && lastPointer) {
+    const dx = e.clientX - lastPointer.x;
+    const dy = e.clientY - lastPointer.y;
+    posX += dx;
+    posY += dy;
+    lastPointer = { x: e.clientX, y: e.clientY };
+    applyTransform();
   }
 });
 
-gridWrapper.addEventListener('touchmove', e => {
-  e.preventDefault();
-
-  /* PAN */
-  if (e.touches.length === 1 && isDraggingPan) {
-    const t = e.touches[0];
-    panX += t.clientX - lastTouch.clientX;
-    panY += t.clientY - lastTouch.clientY;
-    lastTouch = t;
-    applyTransform();
+/* Pointer up */
+gridEl.addEventListener('pointerup', (e) => {
+  if (dragPlacement) {
+    const { r, c } = getTransformedPoint(e.clientX, e.clientY);
+    const newR = r - dragOffsetR;
+    const newC = c - dragOffsetC;
+    if (newR < 0 || newC < 0 || newR + dragPlacement.size > GRID_SIZE || newC + dragPlacement.size > GRID_SIZE) {
+      dragPlacement._tempR = null;
+      dragPlacement._tempC = null;
+      dragPlacement = null;
+      renderAll();
+      return;
+    }
+    const overlap = placements.some(p => p.id !== dragPlacement.id && rectsOverlap(newR, newC, dragPlacement.size, p.r, p.c, p.size));
+    if (!overlap) {
+      dragPlacement.r = newR;
+      dragPlacement.c = newC;
+      saveHistory();
+    }
+    dragPlacement._tempR = null;
+    dragPlacement._tempC = null;
+    dragPlacement = null;
+    renderAll();
+    return;
   }
 
-  /* PINCH ZOOM */
-  if (e.touches.length === 2) {
-    const [a,b] = e.touches;
-    const newDist = Math.hypot(
-      a.clientX - b.clientX,
-      a.clientY - b.clientY
-    );
-    if (lastTouch.length === 2) {
-      const oldDist = Math.hypot(
-        lastTouch[0].clientX - lastTouch[1].clientX,
-        lastTouch[0].clientY - lastTouch[1].clientY
-      );
-      scale *= newDist / oldDist;
-      scale = Math.min(Math.max(scale, 0.5), 3);
-      applyTransform();
+  isPanning = false;
+  lastPointer = null;
+});
+
+/* --- RIGHT-CLICK DELETE HANDLER (works with zoom/pan/drag) --- */
+gridWrapper.addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+
+    let target = document.elementFromPoint(e.clientX, e.clientY);
+
+    while (target && !target.dataset?.r) {
+        target = target.parentElement;
     }
-    lastTouch = e.touches;
+    if (!target) return;
+
+    const r = parseInt(target.dataset.r, 10);
+    const c = parseInt(target.dataset.c, 10);
+
+    const placement = placements.find(
+        (p) =>
+            r >= p.r &&
+            r < p.r + p.size &&
+            c >= p.c &&
+            c < p.c + p.size
+    );
+    if (!placement) return;
+
+    if (!confirm(`Remove "${placement.name}"?`)) return;
+
+    removePlacementById(placement.id);
+    saveHistory();
+});
+
+
+/* Drag & drop from sidebar to grid (uses elementFromPoint to find cell) */
+gridEl.addEventListener('dragover', e => e.preventDefault());
+
+gridEl.addEventListener('drop', (e) => {
+  e.preventDefault();
+
+  let target = document.elementFromPoint(e.clientX, e.clientY);
+  while (target && !target.dataset?.r) target = target.parentElement;
+
+  let r, c;
+  if (target && target.dataset?.r) {
+    r = parseInt(target.dataset.r, 10);
+    c = parseInt(target.dataset.c, 10);
+  } else {
+    ({ r, c } = getTransformedPoint(e.clientX, e.clientY));
+  }
+
+  const name = e.dataTransfer.getData('text/defense');
+  if (!name) return;
+
+  placeDefense(name, r, c);
+  saveHistory();
+});
+
+
+/* Click handler (transformed) — handles tap-to-place & selection */
+gridEl.addEventListener('click', (e) => {
+  // compute cell element first (handles overlays/zoom)
+  let cellEl = document.elementFromPoint(e.clientX, e.clientY);
+  while (cellEl && !cellEl.dataset?.r) cellEl = cellEl.parentElement;
+
+  let r, c;
+  if (cellEl && cellEl.dataset?.r) {
+    r = parseInt(cellEl.dataset.r, 10);
+    c = parseInt(cellEl.dataset.c, 10);
+  } else {
+    ({ r, c } = getTransformedPoint(e.clientX, e.clientY));
+  }
+
+  // TAP-TO-PLACE
+  if (armedDefense) {
+    placeDefense(armedDefense, r, c);
+    saveHistory();
+    armedDefense = null;
+    [...defenseScroller.children].forEach(i => i.style.outline = '');
+    return;
+  }
+
+  const placement = placements.find(p =>
+    r >= p.r && r < p.r + p.size &&
+    c >= p.c && c < p.c + p.size
+  );
+  if (!placement) return;
+  const idx = selectedTargets.indexOf(placement.id);
+  if (idx === -1) selectedTargets.push(placement.id);
+  else selectedTargets.splice(idx,1);
+  computedDrops = [];
+  saveHistory();
+  renderAll();
+});
+
+/* Touch: pinch to zoom handling on gridWrapper */
+let pinchStartDist = 0, pinchStartScale = 1, pinchOrigin = null;
+
+gridWrapper.addEventListener('touchstart', (e) => {
+  if (e.touches.length === 2) {
+    e.preventDefault();
+    pinchStartDist = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+    pinchStartScale = scale;
+    pinchOrigin = {
+      x: (e.touches[0].clientX + e.touches[1].clientX)/2,
+      y: (e.touches[0].clientY + e.touches[1].clientY)/2
+    };
   }
 }, { passive:false });
 
-gridWrapper.addEventListener('touchend', ()=>{
-  isDraggingPan = false;
-  lastTouch = null;
+gridWrapper.addEventListener('touchmove', (e) => {
+  if (e.touches.length === 2 && pinchStartDist > 0) {
+    e.preventDefault();
+    const curDist = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+    const newScale = Math.min(Math.max(0.5, pinchStartScale * curDist / pinchStartDist), 3);
+
+    const rect = gridEl.getBoundingClientRect();
+    const originX = pinchOrigin.x - rect.left;
+    const originY = pinchOrigin.y - rect.top;
+
+    const preZoomX = (originX - posX) / scale;
+    const preZoomY = (originY - posY) / scale;
+
+    scale = newScale;
+
+    posX = originX - preZoomX * scale;
+    posY = originY - preZoomY * scale;
+
+    applyTransform();
+  }
+}, { passive:false });
+
+gridWrapper.addEventListener('touchend', (e) => {
+  if (e.touches.length < 2) {
+    pinchStartDist = 0;
+    pinchOrigin = null;
+  }
 });
 
-function applyTransform(){
-  gridEl.style.transform =
-    `translate(${panX}px, ${panY}px) scale(${scale})`;
+/* apply transform to grid */
+function applyTransform() {
+  gridEl.style.transform = `translate(${posX}px, ${posY}px) scale(${scale})`;
 }
+
+/* initialization: ensure transform is applied */
+applyTransform();
+
 </script>
 </body>
 </html>
