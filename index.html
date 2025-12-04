@@ -602,10 +602,6 @@ function getSelectedCenters() {
   let centerR = sumR / centers.length;
   let centerC = sumC / centers.length;
 
-  // 2. Snap to nearest grid coordinate (NO half-cell guessing)
-  centerR = Math.round(centerR);
-  centerC = Math.round(centerC);
-
   // 3. Find which defenses are covered
   const covered = centers
     .filter(pt => euclideanDist(centerR, centerC, pt.r, pt.c) <= FROST_RADIUS)
