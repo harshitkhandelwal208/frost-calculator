@@ -535,14 +535,18 @@ function renderAll(){
   }
 
   for (let drop of computedDrops) {
-    for (let x = -FROST_RADIUS; x <= FROST_RADIUS; x++) {
-      for (let y = -FROST_RADIUS; y <= FROST_RADIUS; y++) {
-        if (Math.sqrt(x*x + y*y) <= FROST_RADIUS) {
-          const cell = gridEl.querySelector(`[data-r="${drop.r + x}"][data-c="${drop.c + y}"]`);
-          if (cell) cell.classList.add('frosted');
-        }
-      }
+for (let x = -FROST_RADIUS; x <= FROST_RADIUS; x++) {
+  for (let y = -FROST_RADIUS; y <= FROST_RADIUS; y++) {
+    // Use center of cell to measure distance to frost drop
+    const cellR = Math.round(drop.r + x);
+    const cellC = Math.round(drop.c + y);
+    const dist = Math.hypot(cellR + 0.5 - drop.r, cellC + 0.5 - drop.c);
+    if (dist <= FROST_RADIUS) {
+      const cell = gridEl.querySelector(`[data-r="${cellR}"][data-c="${cellC}"]`);
+      if (cell) cell.classList.add('frosted');
     }
+  }
+}
     const centerCell = gridEl.querySelector(`[data-r="${drop.r}"][data-c="${drop.c}"]`);
     if (centerCell) {
       let red = centerCell.querySelector('.frost-center');
