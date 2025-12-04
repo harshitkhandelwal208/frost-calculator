@@ -510,16 +510,21 @@ function renderAll(){
 
     const centerR = baseR + Math.floor(p.size / 2);
     const centerC = baseC + Math.floor(p.size / 2);
-    const centerCell = gridEl.querySelector(`[data-r="${centerR}"][data-c="${centerC}"]`);
-    if (centerCell) {
-      let marker = centerCell.querySelector('.center-marker');
-      if (!marker) {
-        marker = document.createElement('div');
-        marker.className = 'center-marker';
-        centerCell.appendChild(marker);
-      }
-    }
-  }
+    const cellSize = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cell-size')) || 24;
+const gridRect = gridEl.getBoundingClientRect();
+let dot = document.getElementById('frost-dot-' + drop.r + '-' + drop.c);
+if (!dot) {
+  dot = document.createElement('div');
+  dot.className = 'frost-center';
+  dot.id = 'frost-dot-' + drop.r + '-' + drop.c;
+  gridEl.appendChild(dot);
+}
+dot.style.position = 'absolute';
+dot.style.left = ((drop.c + 0.5) * cellSize) + 'px';
+dot.style.top = ((drop.r + 0.5) * cellSize) + 'px';
+dot.style.pointerEvents = 'none';
+// Optionally set transform/translate to perfectly center
+dot.style.transform = 'translate(-50%,-50%)';
 
   for (let id of selectedTargets) {
     const p = placements.find(x => x.id === id);
