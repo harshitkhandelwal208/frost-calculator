@@ -4,7 +4,6 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Clan Capital Frost Planner — Fixed</title>
-<!-- ======= Styles ======= -->
 <style>
   :root{
     --sidebar-w: 260px;
@@ -48,7 +47,7 @@
     background:#ff2b2b;
     transform:translate(-50%,-50%);
     pointer-events:none;
-    z-index:5;
+    z-index: 100; /* FIXED: Ensure dot is visible above all else */
   }
 
   #defenseScroller {
@@ -178,7 +177,6 @@
 </head>
 <body>
 
-  <!-- SIDEBAR -->
   <div id="sidebar">
     <h2>Defenses</h2>
     <div id="controls">
@@ -208,7 +206,6 @@
     <div class="hint muted">Toggle Image vs Highlight mode to see images or just colored names.</div>
   </div>
 
-  <!-- MAIN -->
   <div id="main">
     <div id="gridArea">
         <div id="gridWrapper">
@@ -216,7 +213,6 @@
         </div>
     </div>
 
-    <!-- RIGHT PANEL -->
     <div id="rightPanel">
       <div class="card">
         <h3>Frost Spell Deployments</h3>
@@ -240,7 +236,6 @@
     </div>
   </div>
 
-  <!-- html2canvas for export -->
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 
 <script>
@@ -459,18 +454,22 @@ function removePlacementById(id) {
 /* Render all (considers temporary _tempR/_tempC) */
 function renderAll(){
   const cells = gridEl.querySelectorAll('.cell');
+  
+  // 1. Clear previous state (placements, selections, frost effects)
   cells.forEach(cell => {
-    cell.className = 'cell';
+    cell.className = 'cell'; // reset classes
     cell.style.backgroundImage = '';
     cell.textContent = '';
     const img = cell.querySelector('.defense-image');
     if (img) img.remove();
     const cm = cell.querySelector('.center-marker');
     if (cm) cm.remove();
-    const fc = cell.querySelector('.frost-center');
-    if (fc) fc.remove();
   });
+  
+  // FIXED: Clear all floating frost center dots from the grid container
+  gridEl.querySelectorAll('.frost-center').forEach(dot => dot.remove());
 
+  // 2. Render Placements
   for (let p of placements) {
     const baseR = (typeof p._tempR === 'number') ? p._tempR : p.r;
     const baseC = (typeof p._tempC === 'number') ? p._tempC : p.c;
@@ -507,25 +506,11 @@ function renderAll(){
         tlCell.appendChild(img);
       }
     }
+    // Note: The problematic code block that used an undefined 'drop' variable 
+    // and caused a script crash has been removed from here.
+  }
 
-    const centerR = baseR + Math.floor(p.size / 2);
-    const centerC = baseC + Math.floor(p.size / 2);
-    const cellSize = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cell-size')) || 24;
-const gridRect = gridEl.getBoundingClientRect();
-let dot = document.getElementById('frost-dot-' + drop.r + '-' + drop.c);
-if (!dot) {
-  dot = document.createElement('div');
-  dot.className = 'frost-center';
-  dot.id = 'frost-dot-' + drop.r + '-' + drop.c;
-  gridEl.appendChild(dot);
-}
-dot.style.position = 'absolute';
-dot.style.left = ((drop.c + 0.5) * cellSize) + 'px';
-dot.style.top = ((drop.r + 0.5) * cellSize) + 'px';
-dot.style.pointerEvents = 'none';
-// Optionally set transform/translate to perfectly center
-dot.style.transform = 'translate(-50%,-50%)';
-
+  // 3. Render Selection Highlights
   for (let id of selectedTargets) {
     const p = placements.find(x => x.id === id);
     if (!p) continue;
@@ -539,28 +524,37 @@ dot.style.transform = 'translate(-50%,-50%)';
     }
   }
 
+  // 4. Render Frost Drops (Effects and Center Dots)
+  const cellSize = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cell-size')) || 24;
+
   for (let drop of computedDrops) {
-for (let x = -FROST_RADIUS; x <= FROST_RADIUS; x++) {
-  for (let y = -FROST_RADIUS; y <= FROST_RADIUS; y++) {
-    // Use center of cell to measure distance to frost drop
-    const cellR = Math.round(drop.r + x);
-    const cellC = Math.round(drop.c + y);
-    const dist = Math.hypot(cellR + 0.5 - drop.r, cellC + 0.5 - drop.c);
-    if (dist <= FROST_RADIUS) {
-      const cell = gridEl.querySelector(`[data-r="${cellR}"][data-c="${cellC}"]`);
-      if (cell) cell.classList.add('frosted');
+    // A. Render the blue frost effect on tiles
+    for (let x = -FROST_RADIUS; x <= FROST_RADIUS; x++) {
+        for (let y = -FROST_RADIUS; y <= FROST_RADIUS; y++) {
+            // Determine the integer cell index
+            const cellR = Math.floor(drop.r + x);
+            const cellC = Math.floor(drop.c + y);
+            
+            // Calculate precise distance from drop center (e.g. 10.5, 10.5) to tile center (e.g. 10.5, 10.5)
+            const dist = Math.hypot((cellR + 0.5) - drop.r, (cellC + 0.5) - drop.c);
+            
+            if (dist <= FROST_RADIUS) {
+                const cell = gridEl.querySelector(`[data-r="${cellR}"][data-c="${cellC}"]`);
+                if (cell) cell.classList.add('frosted');
+            }
+        }
     }
-  }
-}
-    const centerCell = gridEl.querySelector(`[data-r="${drop.r}"][data-c="${drop.c}"]`);
-    if (centerCell) {
-      let red = centerCell.querySelector('.frost-center');
-      if (!red) {
-        red = document.createElement('div');
-        red.className = 'frost-center';
-        centerCell.appendChild(red);
-      }
-    }
+
+    // B. Render the Red Center Dot (Absolute positioning on Grid)
+    let dot = document.createElement('div');
+    dot.className = 'frost-center';
+    
+    // Position dot based on calculated float coordinates * cellSize
+    dot.style.top = (drop.r * cellSize) + 'px';
+    dot.style.left = (drop.c * cellSize) + 'px';
+    
+    // The CSS transform: translate(-50%, -50%) centers the dot perfectly on this pixel coordinate.
+    gridEl.appendChild(dot);
   }
 
   renderFrostList();
@@ -576,7 +570,7 @@ function renderFrostList() {
   computedDrops.forEach((drop, idx) => {
     const li = document.createElement('li');
     const coversNames = (drop.covers || []).map(id => (placements.find(p=>p.id===id)||{}).name).filter(Boolean);
-    li.textContent = `Drop ${idx+1}: at (${drop.r}, ${drop.c}) — covers: ${coversNames.join(', ') || '—'}`;
+    li.textContent = `Drop ${idx+1}: at (${drop.r.toFixed(1)}, ${drop.c.toFixed(1)}) — covers: ${coversNames.join(', ') || '—'}`;
     frostListEl.appendChild(li);
   });
 }
@@ -585,11 +579,13 @@ function renderFrostList() {
 function euclideanDist(aR,aC,bR,bC) {
   const dx = aR - bR, dy = aC - bC; return Math.sqrt(dx*dx + dy*dy);
 }
+
+// FIXED: Removed Math.floor() to calculate the true geometric center (e.g., 1.5 for 3x3, 1.0 for 2x2)
 function getSelectedCenters() {
   return selectedTargets.map(id=>{
     const p = placements.find(x=>x.id===id);
     if (!p) return null;
-    return { id: p.id, r: p.r + Math.floor(p.size/2), c: p.c + Math.floor(p.size/2) };
+    return { id: p.id, r: p.r + (p.size/2), c: p.c + (p.size/2) };
   }).filter(Boolean);
 }
 
@@ -616,7 +612,7 @@ function getSelectedCenters() {
     .filter(pt => euclideanDist(centerR, centerC, pt.r, pt.c) <= FROST_RADIUS)
     .map(pt => pt.id);
 
-  if (covered.length === 0) {
+    if (covered.length === 0) {
     alert('Midpoint frost does not cover any selected defenses.');
     return;
   }
@@ -624,19 +620,21 @@ function getSelectedCenters() {
   // 4. Store exactly like before
   computedDrops = [{
     r: centerR,
-    c: centerC,
+        c: centerC,
     covers: covered
   }];
 
   saveHistory();
   renderAll();
 }
+
 /* Manual center-based compute */
 function computeManualFrostsForSelected() {
   computedDrops = selectedTargets.map(id => {
     const p = placements.find(x=>x.id===id);
-    const centerR = p.r + Math.floor(p.size/2);
-    const centerC = p.c + Math.floor(p.size/2);
+    // FIXED: Use exact center (p.size/2)
+    const centerR = p.r + (p.size/2);
+    const centerC = p.c + (p.size/2);
     return { r: centerR, c: centerC, covers: [p.id] };
   });
   renderAll();
@@ -698,10 +696,13 @@ exportBtn.addEventListener('click', async () => {
   for (let drop of computedDrops) {
     for (let dx=-FROST_RADIUS; dx<=FROST_RADIUS; dx++){
       for (let dy=-FROST_RADIUS; dy<=FROST_RADIUS; dy++){
-        const dist = Math.sqrt(dx*dx + dy*dy);
+        const rr = Math.floor(drop.r + dx);
+        const cc = Math.floor(drop.c + dy);
+        
+        // Use the calculated distance check from renderAll for export consistency
+        const dist = Math.hypot((cc + 0.5) - drop.c, (rr + 0.5) - drop.r);
+
         if (dist <= FROST_RADIUS) {
-          const rr = drop.r + dx;
-          const cc = drop.c + dy;
           if (rr < 0 || rr >= GRID_SIZE || cc < 0 || cc >= GRID_SIZE) continue;
           const x = Math.round(cc * cellSize * exportScale);
           const y = Math.round(rr * cellSize * exportScale);
@@ -713,8 +714,8 @@ exportBtn.addEventListener('click', async () => {
         }
       }
     }
-    const cx = Math.round((drop.c + 0.5) * cellSize * exportScale);
-    const cy = Math.round((drop.r + 0.5) * cellSize * exportScale);
+    const cx = Math.round((drop.c) * cellSize * exportScale);
+    const cy = Math.round((drop.r) * cellSize * exportScale);
     ctx.beginPath();
     ctx.fillStyle = '#ff2b2b';
     ctx.arc(cx, cy, Math.max(3, exportScale * 3), 0, Math.PI*2);
@@ -1052,4 +1053,3 @@ applyTransform();
 </script>
 </body>
 </html>
-
