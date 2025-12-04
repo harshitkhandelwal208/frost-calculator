@@ -592,37 +592,42 @@ function computeOptimalFrostDrops() {
     return;
   }
 
-  const candidates = [];
-  for (let r=0; r<GRID_SIZE; r++){
-    for (let c=0; c<GRID_SIZE; c++){
-      candidates.push({ r, c, covers: [] });
-    }
+  // ---- 1. Compute geometric centroid (continuous space) ----
+  let sumR = 0, sumC = 0;
+  for (const pt of centers) {
+    sumR += pt.r;
+    sumC += pt.c;
   }
 
-  for (let cand of candidates) {
-    cand.covers = centers.filter(pt => euclideanDist(cand.r,cand.c,pt.r,pt.c) <= FROST_RADIUS).map(pt=>pt.id);
-  }
-  const viable = candidates.filter(c => c.covers.length > 0);
+  let centerR = sumR / centers.length;
+  let centerC = sumC / centers.length;
 
-  const uncovered = new Set(centers.map(pt=>pt.id));
-  const drops = [];
-  while (uncovered.size > 0) {
-    let best = null; let bestCount = 0;
-    for (let cand of viable) {
-      let cnt = 0;
-      for (let id of cand.covers) if (uncovered.has(id)) cnt++;
-      if (cnt > bestCount) { best = cand; bestCount = cnt; }
-    }
-    if (!best) break;
-    const coveringIds = best.covers.filter(id => uncovered.has(id));
-    drops.push({ r: best.r, c: best.c, covers: coveringIds.slice() });
-    coveringIds.forEach(id=>uncovered.delete(id));
+  // ---- 2. Snap to proper grid location (fix displacement) ----
+  // If your grid cells are drawn centered at (r + 0.5, c + 0.5),
+  // this aligns frost exactly with defenses.
+  centerR = Math.round(centerR - 0.5) + 0.5;
+  centerC = Math.round(centerC - 0.5) + 0.5;
+
+  // ---- 3. Determine which defenses are actually covered ----
+  const covered = centers
+    .filter(pt => euclideanDist(centerR, centerC, pt.r, pt.c) <= FROST_RADIUS)
+    .map(pt => pt.id);
+
+  if (covered.length === 0) {
+    alert('Computed midpoint does not cover any selected defenses.');
+    return;
   }
-  computedDrops = drops;
+
+  // ---- 4. Store result exactly like before ----
+  computedDrops = [{
+    r: centerR,
+    c: centerC,
+    covers: covered
+  }];
+
   saveHistory();
   renderAll();
 }
-
 /* Manual center-based compute */
 function computeManualFrostsForSelected() {
   computedDrops = selectedTargets.map(id => {
